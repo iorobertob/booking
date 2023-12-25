@@ -8,7 +8,7 @@ pymysql.install_as_MySQLdb()
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://booking:booking@localhost/booking'
-app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['SECRET_KEY'] = 'thesecretkeytotheuniverse'
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -40,7 +40,7 @@ def create_admin_user():
         # Check if admin user already exists to avoid duplicate entries
         admin_exists = User.query.filter_by(username='admin').first() is not None
         if not admin_exists:
-            admin_user = User(username='admin', password=generate_password_hash('password', method='pbkdf2'), is_admin=True)
+            admin_user = User(username='admin', password=generate_password_hash('Onahquahn2', method='pbkdf2'), is_admin=True)
             db.session.add(admin_user)
             db.session.commit()
 
@@ -50,7 +50,8 @@ def load_user(user_id):
 
 @app.route('/')
 def home():
-    return render_template('home.html')
+    items = Item.query.all()
+    return render_template('home.html', items=items)
 
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -62,7 +63,7 @@ def login():
         if user and check_password_hash(user.password, password):
             login_user(user)
             flash('Login successful', 'success')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('home'))
         else:
             flash('Login unsuccessful. Please check your username and password.', 'danger')
     return render_template('login.html')
@@ -83,7 +84,6 @@ def dashboard():
 
 # Book item route
 @app.route('/book/<int:item_id>', methods=['GET', 'POST'])
-@login_required
 def book_item(item_id):
     item = Item.query.get_or_404(item_id)
 
@@ -91,16 +91,18 @@ def book_item(item_id):
         borrower_name = request.form.get('borrower_name')
         borrower_contact = request.form.get('borrower_contact')
         borrow_date = datetime.strptime(request.form.get('borrow_date'), '%Y-%m-%d')
+        return_date = datetime.strptime(request.form.get('return_date'), '%Y-%m-%d')
         
         item.status = 'booked'
         item.borrower_name = borrower_name
         item.borrower_contact = borrower_contact
         item.borrow_date = borrow_date
+        item.return_date = return_date
         
         db.session.commit()
         
         flash(f'Item {item.name} booked successfully!', 'success')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home'))
 
     return render_template('book_item.html', item=item)
 
@@ -117,7 +119,7 @@ def lend_item(item_id):
     db.session.commit()
     
     flash(f'Item {item.name} marked as lent!', 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('home'))
 
 # Return item route (accessible only by admin users)
 @app.route('/return/<int:item_id>')
@@ -135,7 +137,7 @@ def return_item(item_id):
     db.session.commit()
     
     flash(f'Item {item.name} marked as returned!', 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('home'))
 
 # Add item route (accessible only by admin users)
 @app.route('/add_item', methods=['GET', 'POST'])
@@ -152,9 +154,27 @@ def add_item():
         db.session.add(new_item)
         db.session.commit()
         flash(f'Item {name} added successfully!', 'success')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home'))
 
     return render_template('add_item.html')
+
+# Add item route (accessible only by admin users)
+@app.route('/delete_item/<int:item_id>', methods=['GET', 'POST'])
+@login_required
+def delete_item(item_id):
+    if not current_user.is_admin:
+        flash('Permission denied. You do not have admin privileges.', 'danger')
+        return redirect(url_for('home'))
+
+    if request.method == 'GET':
+        item = Item.query.get_or_404(item_id)
+        name = item.name
+        Item.query.filter_by(id=item_id).delete()
+        db.session.commit()
+        flash(f'Item {name} deleted successfully!', 'success')
+        return redirect(url_for('home'))
+
+    return redirect(url_for('home'))
 
 # Admin page route (accessible only by admin users)
 @app.route('/admin_page')
@@ -162,7 +182,7 @@ def add_item():
 def admin_page():
     if not current_user.is_admin:
         flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home'))
 
     return render_template('admin_page.html')
 

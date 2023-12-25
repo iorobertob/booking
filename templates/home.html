@@ -3,10 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home</title>
+    <title>Dashboard</title>
+    <!-- Include DataTables CSS and jQuery -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.12.1/css/jquery.dataTables.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            width: 80%;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #34495e;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #ecf0f1;
+        }
+        a {
+            color: #2980b9;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <h1>Welcome to the Music Technology Centre Booking System</h1>
-    <p><a href="{{ url_for('login') }}">Login</a></p>
+    <div class="container">
+        <h1>Welcome to the Music Innovation Studies Centre's Booking System</h1>
+        {% if current_user.is_authenticated %}
+            <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}">Logout</a></p>
+        {% else %}
+            <p>Welcome. <a href="{{ url_for('login') }}">Login</a></p>
+        {% endif %}
+            <table id="bookingTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th>Borrower</th>
+                        <th>Borrower Contact</th>
+                        <th>Borrow Date</th>
+                        <th>Return Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.location }}</td>
+                            <td>{{ item.status }}</td>
+                            <td>{{ item.borrower_name }}</td>
+                            <td>{{ item.borrower_contact }}</td>
+                            <td>{{ item.borrow_date.strftime('%Y-%m-%d') if item.borrow_date else '' }}</td>
+                            <td>{{ item.return_date.strftime('%Y-%m-%d') if item.return_date else '' }}</td>
+                            <td>
+                            {% if item.status == 'available' %}
+                                <a href="{{ url_for('book_item', item_id=item.id) }}">Book</a>
+                            {% elif item.status == 'booked' and current_user.is_admin %}
+                                | <a href="{{ url_for('lend_item', item_id=item.id) }}">Mark as Lent</a>
+                                | <a href="{{ url_for('return_item', item_id=item.id) }}">Deny Booking</a>
+                            {% elif item.status == 'booked' and current_user.is_authenticated == False %}
+                                 <p>Waiting...</p>
+                            {% elif item.status == 'lent' and current_user.is_admin %}
+                                | <a href="{{ url_for('return_item', item_id=item.id) }}">Mark as Returned</a>
+                            {% endif %}
+                            {% if current_user.is_admin %}
+                                | <a href="{{ url_for('delete_item', item_id=item.id) }}">Delete</a>
+                            {% endif %}
+                        </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if current_user.is_admin %}
+                <p><a href="{{ url_for('add_item') }}">Add Item</a></p>
+                <p><a href="{{ url_for('admin_page') }}">Admin Page</a></p>
+            {% endif %}
+    </div>
+
+    <!-- Include jQuery and DataTables JavaScript at the end of the body for faster loading -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.12.1/js/jquery.dataTables.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#bookingTable').DataTable();
+        });
+    </script>
 </body>
 </html>
