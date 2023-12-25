@@ -3,9 +3,11 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import pymysql
+pymysql.install_as_MySQLdb()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://booking:booking@localhost/booking'
 app.config['SECRET_KEY'] = 'your_secret_key'
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -28,14 +30,19 @@ class Item(db.Model):
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
-    password = db.Column(db.String(60), nullable=False)
+    password = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
 # Create an admin user
-admin_user = User(username='admin', password=generate_password_hash('password', method='sha256'), is_admin=True)
-db.create_all()
-db.session.add(admin_user)
-db.session.commit()
+def create_admin_user():
+    with app.app_context():
+        db.create_all()
+        # Check if admin user already exists to avoid duplicate entries
+        admin_exists = User.query.filter_by(username='admin').first() is not None
+        if not admin_exists:
+            admin_user = User(username='admin', password=generate_password_hash('password', method='pbkdf2'), is_admin=True)
+            db.session.add(admin_user)
+            db.session.commit()
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -160,4 +167,6 @@ def admin_page():
     return render_template('admin_page.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    
+    create_admin_user()  # Call the function to create admin user
+    app.run(debug=True, host='0.0.0.0')
