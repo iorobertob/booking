@@ -10,6 +10,19 @@
     <link href="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.css" rel="stylesheet">
 
     <style>
+        .header {
+            display: flex;
+            align-items: center;
+        }
+        .header img {
+            max-height: 60px; /* Adjust the size of the logo */
+            margin-right: 15px; /* Spacing between logo and title */
+        }
+        .header h1 {
+            margin: 0; /* Removes default margin */
+            flex-grow: 1; /* Allows title to take the remaining width */
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
@@ -57,7 +70,11 @@
 </head>
 <body>
     <div class="container">
-        <h1>Welcome to the Music Innovation Studies Centre's Booking System</h1>
+        <div class="header">
+            <img src="{{ url_for('static', filename='lmta_logo.png') }}"  alt="Music Tech Centre Logo"> <!-- Adjust the path to your image -->
+            <h1>Welcome to the Music Innovation Studies' Centre Booking System</h1>
+        </div>
+        <hr>
         {% if current_user.is_authenticated %}
             <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}">Logout</a></p>
         {% else %}
