@@ -14,7 +14,7 @@ with open("vars/vars.json", "r") as file:
     username  = str(vars_json.get("db_username"))
     password  = str(vars_json.get("db_password"))
     database  = str(vars_json.get("database"))
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://'+username+':'+password+'@localhost/'+database+''
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://'+username+':'+password+'@localhost/'+database
 
     app.config['SECRET_KEY'] = vars_json.get("secret_key")
     
