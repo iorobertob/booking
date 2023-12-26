@@ -7,9 +7,16 @@ import pymysql
 import json
 pymysql.install_as_MySQLdb()
 
+LOCALHOST = False
+
 app = Flask(__name__, static_folder='images')
 
-with open("vars/vars.json", "r") as file:
+if LOCALHOST:
+    vars_path = "vars/vars.json"
+else:
+    vars_path = "git/vars/vars.json"
+
+with open(vars_path, "r") as file:
     vars_json = json.load(file)
     username  = str(vars_json.get("db_username"))
     password  = str(vars_json.get("db_password"))
@@ -143,6 +150,7 @@ def return_item(item_id):
     item.borrower_name = ''
     item.borrower_contact = ''
     item.borrow_date = None
+    item.return_date = None
     db.session.commit()
     
     flash(f'Item {item.name} marked as returned!', 'success')
