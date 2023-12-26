@@ -4,11 +4,20 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import pymysql
+import json
 pymysql.install_as_MySQLdb()
 
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://booking:booking@localhost/booking'
-app.config['SECRET_KEY'] = 'thesecretkeytotheuniverse'
+app = Flask(__name__, static_folder='images')
+
+with open("vars/vars.json", "r") as file:
+    vars_json = json.load(file)
+    username  = str(vars_json.get("db_username"))
+    password  = str(vars_json.get("db_password"))
+    database  = str(vars_json.get("database"))
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://'+username+':'+password+'@localhost/'+database+''
+
+    app.config['SECRET_KEY'] = vars_json.get("secret_key")
+    
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -189,4 +198,4 @@ def admin_page():
 if __name__ == '__main__':
     
     create_admin_user()  # Call the function to create admin user
-    app.run(debug=True, host='0.0.0.0')
+    app.run(debug=False, host='0.0.0.0')
