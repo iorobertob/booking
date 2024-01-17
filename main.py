@@ -176,6 +176,28 @@ def add_item():
     return render_template('add_item.html')
 
 # Add item route (accessible only by admin users)
+@app.route('/edit_item/<int:item_id>', methods=['GET', 'POST'])
+@login_required
+def edit_item():
+    if not current_user.is_admin:
+        flash('Permission denied. You do not have admin privileges.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    item = Item.query.get_or_404(item_id)
+    return render_template('edit_item.html', item=item)
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        location = request.form.get('location')
+        new_item = Item(name=name, location=location)
+        db.session.add(new_item)
+        db.session.commit()
+        flash(f'Item {name} added successfully!', 'success')
+        return redirect(url_for('home'))
+
+    return render_template('add_item.html')
+
+# Add item route (accessible only by admin users)
 @app.route('/delete_item/<int:item_id>', methods=['GET', 'POST'])
 @login_required
 def delete_item(item_id):
