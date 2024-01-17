@@ -14,7 +14,7 @@ app = Flask(__name__, static_folder='images')
 if LOCALHOST:
     vars_path = "vars/vars.json"
 else:
-    vars_path = "git/vars/vars.json"
+    vars_path = "vars/vars.json"
 
 with open(vars_path, "r") as file:
     vars_json = json.load(file)
