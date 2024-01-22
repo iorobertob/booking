@@ -49,6 +49,11 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
+@app.route('/images/<path:filename>')
+def custom_static(filename):
+    return send_from_directory('images', filename)
+
+
 # Create an admin user
 def create_admin_user():
     with app.app_context():
