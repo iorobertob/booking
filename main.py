@@ -51,7 +51,8 @@ class User(UserMixin, db.Model):
 
 @app.route('/booking/images/<path:filename>')
 def custom_static(filename):
-    return send_from_directory('images', filename)
+    return render_template('login.html')
+    # return send_from_directory('images', filename)
 
 @app.route('/images/<path:filename>')
 def custom_images(filename):
