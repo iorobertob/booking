@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime
 import pymysql
 import json
@@ -10,6 +11,12 @@ pymysql.install_as_MySQLdb()
 LOCALHOST = False
 
 app = Flask(__name__, static_folder='images')
+
+app.wsgi_app = ProxyFix(
+    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
+)
+
+app.config['APPLICATION_ROOT'] = '/booking'
 
 if LOCALHOST:
     vars_path = "vars/vars.json"
