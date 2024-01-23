@@ -55,7 +55,8 @@ def custom_static(filename):
 
 @app.route('/images/<path:filename>')
 def custom_images(filename):
-    return send_from_directory('images', filename)
+    return render_template('login.html')
+    # return send_from_directory('images', filename)
 
 # Create an admin user
 def create_admin_user():
