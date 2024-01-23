@@ -54,7 +54,7 @@ def custom_static(filename):
     return render_template('login.html')
     # return send_from_directory('images', filename)
 
-@app.route('/images/<filename>', methods=['GET', 'POST'])
+@app.route('/images/<path:filename>', methods=['GET', 'POST'])
 def custom_images(filename):
     return render_template('login.html')
     # return send_from_directory('images', filename)
