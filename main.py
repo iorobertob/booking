@@ -206,11 +206,16 @@ def edit_item(item_id):
         return render_template('edit_item.html', item=item)
 
     if request.method == 'POST':
-        name = request.form.get('name')
-        location = request.form.get('location')
-        new_item = Item(name=name, location=location)
-        db.session.add(new_item)
+        name        = request.form.get('name')
+        location    = request.form.get('location')
+        
+        existing_item = Item.query.get(item_id)
+        
+        existing_item.name      = name 
+        existing_item.location  = location 
+
         db.session.commit()
+
         flash(f'Item {name} edited successfully!', 'success')
         return redirect(url_for('home'))
 
