@@ -245,4 +245,4 @@ def admin_page():
 if __name__ == '__main__':
     
     create_admin_user()  # Call the function to create admin user
-    app.run(debug=False, host='0.0.0.0')
+    app.run(debug=True, host='0.0.0.0')
