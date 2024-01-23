@@ -59,8 +59,8 @@ def custom_images(filename):
     return render_template('login.html')
     # return send_from_directory('images', filename)
 
-@app.route('/images', methods=['GET', 'POST'])
-def custom_images2(filename):
+@app.route('/lalala', methods=['GET', 'POST'])
+def custom_images2():
     return render_template('login.html')
     # return send_from_directory('images', filename)
 
