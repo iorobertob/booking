@@ -49,7 +49,7 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
-@app.route('/booking/images/<path:filename>')
+@app.route('/boo0king/images/<path:filename>')
 def custom_static(filename):
     return render_template('login.html')
     # return send_from_directory('images', filename)
