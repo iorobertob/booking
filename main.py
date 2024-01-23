@@ -201,8 +201,9 @@ def edit_item(item_id):
         flash('Permission denied. You do not have admin privileges.', 'danger')
         return redirect(url_for('dashboard'))
 
-    item = Item.query.get_or_404(item_id)
-    return render_template('edit_item.html', item=item)
+    if request.method == 'GET':
+        item = Item.query.get_or_404(item_id)
+        return render_template('edit_item.html', item=item)
 
     if request.method == 'POST':
         name = request.form.get('name')
