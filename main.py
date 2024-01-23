@@ -195,7 +195,7 @@ def add_item():
 # Add item route (accessible only by admin users)
 @app.route('/edit_item/<int:item_id>', methods=['GET', 'POST'])
 @login_required
-def edit_item():
+def edit_item(item_id):
     return render_template('edit_item.html', item=item)
     if not current_user.is_admin:
         flash('Permission denied. You do not have admin privileges.', 'danger')
