@@ -49,20 +49,15 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
-@app.route('/boo0king/images/<path:filename>')
+@app.route('/booking/images/<path:filename>')
 def custom_static(filename):
-    return render_template('login.html')
-    # return send_from_directory('images', filename)
+    # return render_template('login.html')
+    return send_from_directory('images', filename)
 
 @app.route('/images/<path:filename>', methods=['GET', 'POST'])
 def custom_images(filename):
     # return render_template('login.html')
     return send_from_directory('images', filename)
-
-@app.route('/images', methods=['GET', 'POST'])
-def custom_images2():
-    return render_template('login.html')
-    # return send_from_directory('images', filename)
 
 # Create an admin user
 def create_admin_user():
