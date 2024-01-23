@@ -202,7 +202,7 @@ def edit_item():
         new_item = Item(name=name, location=location)
         db.session.add(new_item)
         db.session.commit()
-        flash(f'Item {name} added successfully!', 'success')
+        flash(f'Item {name} edited successfully!', 'success')
         return redirect(url_for('home'))
 
     return render_template('add_item.html')
