@@ -53,6 +53,9 @@ class User(UserMixin, db.Model):
 def custom_static(filename):
     return send_from_directory('images', filename)
 
+@app.route('/images/<path:filename>')
+def custom_images(filename):
+    return send_from_directory('images', filename)
 
 # Create an admin user
 def create_admin_user():
