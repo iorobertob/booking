@@ -4,3 +4,5 @@ Flask-Login
 Werkzeug
 pymysql
 gunicorn
+mailersend
+
