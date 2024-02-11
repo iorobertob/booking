@@ -148,8 +148,8 @@ def book_item(item_id):
 
         response = send_email(  borrower_email= borrower_contact,
                                 borrower_name = borrower_name,
-                                borrow_date   = borrow_date,
-                                return_date   = return_date,
+                                borrow_date   = borrow_date.date(),
+                                return_date   = return_date.date(),
                                 subject       = "Booking",
                                 text_content  = "",
                                 html_content  = "",
