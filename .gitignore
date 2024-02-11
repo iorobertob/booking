@@ -6,3 +6,5 @@ venv/*
 vemv
 
 __pycache__
+
+.DS_Store

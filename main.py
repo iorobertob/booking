@@ -1,4 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
+from mailersend import emails
+import mailersend
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -18,6 +20,8 @@ app.wsgi_app = ProxyFix(
 
 app.config['APPLICATION_ROOT'] = '/booking'
 
+
+
 if LOCALHOST:
     vars_path = "vars/vars.json"
 else:
@@ -31,6 +35,9 @@ with open(vars_path, "r") as file:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://'+username+':'+password+'@localhost/'+database
 
     app.config['SECRET_KEY'] = vars_json.get("secret_key")
+
+    # Initialize MailerSend
+    mailer = emails.NewEmail(str(vars_json.get("mailersend_api_key")))
     
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -93,8 +100,10 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
+        print(str(current_user))
         if user and check_password_hash(user.password, password):
-            login_user(user)
+            response = login_user(user, remember=True)
+            print(response)
             flash('Login successful', 'success')
             return redirect(url_for('home'))
         else:
@@ -133,6 +142,18 @@ def book_item(item_id):
         item.return_date = return_date
         
         db.session.commit()
+
+
+        items  = [item]
+
+        response = send_email(  borrower_email= borrower_contact,
+                                borrower_name = borrower_name,
+                                borrow_date   = borrow_date,
+                                return_date   = return_date,
+                                subject       = "Booking",
+                                text_content  = "",
+                                html_content  = "",
+                                items         = items )
         
         flash(f'Item {item.name} booked successfully!', 'success')
         return redirect(url_for('home'))
@@ -238,6 +259,46 @@ def delete_item(item_id):
         return redirect(url_for('home'))
 
     return redirect(url_for('home'))
+
+# Email delivery system 
+def send_email(borrower_email, borrower_name, borrow_date, return_date, subject, text_content, html_content, items):
+    mail_body = {}
+
+    # Assuming you're passing variables like 'name' and 'booking_date' to your template
+    html_content = render_template('booking.html', 
+                                    borrower_name  = borrower_name, 
+                                    borrower_email = borrower_email,
+                                    borrow_date = borrow_date,
+                                    return_date = return_date,
+                                    now         = datetime.utcnow(),
+                                    items       = items)
+    
+    text_content = "Your booking has been registered. Unless you receive a cancellation, please come to the MISC to take the item(s)"
+    
+    mail_from = {
+    "name": "MISC booking",
+    "email": "booking@ideas-block.com",
+    }
+
+    recipients = [
+        {
+            "name": borrower_name,
+            "email": "roberto@ideas-block.com",
+        }
+    ]
+
+    mailer.set_mail_from(mail_from, mail_body)
+    mailer.set_subject(subject, mail_body)
+    mailer.set_mail_to(recipients, mail_body)
+    mailer.set_plaintext_content(text_content, mail_body)
+    mailer.set_html_content(html_content, mail_body)
+
+    # Send the email
+    response = mailer.send(mail_body)
+    print(response)
+    return response
+
+
 
 # Admin page route (accessible only by admin users)
 @app.route('/admin_page')
