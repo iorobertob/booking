@@ -287,7 +287,7 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
         },
         {
             "name": "Edvinas",
-            "email": "edvinas.siliunas@stud.lmta.lt",
+            "email": "edvinas.siliunas@lmta.lt",
         },
         {
             "name": "Roberto",
