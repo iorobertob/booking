@@ -150,7 +150,7 @@ def book_item(item_id):
                                 borrower_name = borrower_name,
                                 borrow_date   = borrow_date.date(),
                                 return_date   = return_date.date(),
-                                subject       = "Booking",
+                                subject       = "Booking - Do Not Reply",
                                 text_content  = "",
                                 html_content  = "",
                                 items         = items )
