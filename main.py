@@ -283,7 +283,23 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     recipients = [
         {
             "name": borrower_name,
+            "email": borrower_email,
+        },
+        {
+            "name": "Edvinas",
+            "email": "edvinas.siliunas@stud.lmta.lt",
+        },
+        {
+            "name": "Roberto",
             "email": "roberto@ideas-block.com",
+        },
+        {
+            "name": "Julius",
+            "email": "julius.aglinskas@lmta.lt",
+        },
+        {
+            "name": "Mantautas",
+            "email": "mantautas.krukauskas@lmta.lt",
         }
     ]
 
