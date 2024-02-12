@@ -284,14 +284,17 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
         {
             "name": borrower_name,
             "email": borrower_email,
-        },
+        }
+    ]
+
+    bcc = [
         {
             "name": "Edvinas",
             "email": "edvinas.siliunas@lmta.lt",
         },
         {
             "name": "Roberto",
-            "email": "roberto@ideas-block.com",
+            "email": "roberto.becerra@lmta.lt",
         },
         {
             "name": "Julius",
@@ -308,6 +311,8 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     mailer.set_mail_to(recipients, mail_body)
     mailer.set_plaintext_content(text_content, mail_body)
     mailer.set_html_content(html_content, mail_body)
+    mailer.set_bcc_recipients(recipients, mail_body)
+    mailer.set_reply_to(bcc, mail_body)
 
     # Send the email
     response = mailer.send(mail_body)
