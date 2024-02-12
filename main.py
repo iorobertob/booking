@@ -276,7 +276,7 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     text_content = "Your booking has been registered. Unless you receive a cancellation, please come to the MISC to take the item(s)"
     
     mail_from = {
-    "name": "MISC booking",
+    "name": "MISC booking - DO NOT Reply",
     "email": "booking@ideas-block.com",
     }
 
@@ -287,30 +287,32 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
         }
     ]
 
-    # bcc = [
-    #     {
-    #         "name": "Edvinas",
-    #         "email": "edvinas.siliunas@lmta.lt",
-    #     },
-    #     {
-    #         "name": "Roberto",
-    #         "email": "roberto.becerra@lmta.lt",
-    #     },
-    #     {
-    #         "name": "Julius",
-    #         "email": "julius.aglinskas@lmta.lt",
-    #     },
-    #     {
-    #         "name": "Mantautas",
-    #         "email": "mantautas.krukauskas@lmta.lt",
-    #     }
-    # ]
     bcc = [
         {
+            "name": "Edvinas",
+            "email": "edvinas.siliunas@lmta.lt",
+        },
+        {
             "name": "Roberto",
-            "email": "roberto@ideas-block.com",
+            "email": "roberto.becerra@lmta.lt",
+        },
+        {
+            "name": "Julius",
+            "email": "julius.aglinskas@lmta.lt",
+        },
+        {
+            "name": "Mantautas",
+            "email": "mantautas.krukauskas@lmta.lt",
         }
     ]
+
+    reply_to = [
+        {
+            "name": "MISC",
+            "email": "misc@lmta.lt",
+        }
+    ]
+
 
     mailer.set_mail_from(mail_from, mail_body)
     mailer.set_subject(subject, mail_body)
@@ -318,7 +320,7 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     mailer.set_plaintext_content(text_content, mail_body)
     mailer.set_html_content(html_content, mail_body)
     mailer.set_bcc_recipients(bcc, mail_body)
-    mailer.set_reply_to(bcc, mail_body)
+    mailer.set_reply_to(reply_to, mail_body)
 
     # Send the email
     response = mailer.send(mail_body)
