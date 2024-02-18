@@ -8,3 +8,5 @@ vemv
 __pycache__
 
 .DS_Store
+
+migrations/

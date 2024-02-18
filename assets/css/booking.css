@@ -1,0 +1,127 @@
+.header {
+    display: flex;
+    align-items: center;
+}
+.header img {
+    max-height: 60px; /* Adjust the size of the logo */
+    margin-right: 15px; /* Spacing between logo and title */
+}
+.header h1 {
+    margin: 0; /* Removes default margin */
+    flex-grow: 1; /* Allows title to take the remaining width */
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    color: #333;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+body.dialogs {
+    display: flex;
+}
+.container {
+    width: 80%;
+    margin: 20px auto;
+    background-color: #fff;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+h1 {
+    color: #2c3e50;
+    text-align: center;
+    margin-bottom: 20px;
+}
+label {
+    font-weight: bold;
+    display: block;
+    margin-top: 10px;
+}
+input[type="text"],
+input[type="date"],
+input[type="email"] {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box; /* Fixes padding issue */
+}
+button.booking {
+    background-color: #34495e;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 20px;
+    width: 100%;
+}
+button:hover {
+    background-color: #2c3e50;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+th {
+    background-color: #34495e;
+    color: white;
+}
+tr:nth-child(even) {
+    background-color: #ecf0f1;
+}
+a {
+    color: #2980b9;
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}
+
+.alert {
+  padding: 12px;
+  border-radius: 3px;
+  font-size: 1.2rem;
+  margin-bottom: 16px;
+  border-width: 2px;
+  border-style: solid;
+}
+
+.alert-error {
+  border-color: darkred;
+  background-color: red;
+  color: white;
+}
+.alert-danger {
+  border-color: darkred;
+  background-color: darkred;
+  color: white;
+}
+
+.alert-info {
+  border-color: orange;
+  background-color: yellow;
+  color: black;
+}
+.alert-success {
+  border-color: green;
+  background-color: lightgreen;
+  color: black;
+}

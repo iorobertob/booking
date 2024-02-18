@@ -5,76 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MISC Booking</title>
     <!-- Include DataTables CSS and jQuery -->
+
+    <!-- BOOTSTRAP -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- DATATABLES -->
     <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.css" rel="stylesheet">
 
-    <style>
-        .header {
-            display: flex;
-            align-items: center;
-        }
-        .header img {
-            max-height: 60px; /* Adjust the size of the logo */
-            margin-right: 15px; /* Spacing between logo and title */
-        }
-        .header h1 {
-            margin: 0; /* Removes default margin */
-            flex-grow: 1; /* Allows title to take the remaining width */
-        }
+    <!-- CUSTOM CSS -->
+    <link href="{{ url_for('custom_static', filename='css/booking.css') }}" rel="stylesheet">
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
-        }
-        .container {
-            width: 80%;
-            margin: 20px auto;
-            background-color: #fff;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #34495e;
-            color: white;
-        }
-        tr:nth-child(even) {
-            background-color: #ecf0f1;
-        }
-        a {
-            color: #2980b9;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <img src="{{ url_for('custom_static', filename='misc_logo_alpha.png') }}"  alt="MISC Logo"> <!-- Adjust the path to your image -->
+            <img src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}"  alt="MISC Logo"> <!-- Adjust the path to your image -->
             <h1>Music Innovation Studies Centre's Booking System</h1>
         </div>
         <hr>
+        {% for category, message in get_flashed_messages(with_categories=True) %}
+            {% if message %}
+                <ul>
+                        <li>
+                        <div class="alert alert-{{category}}">{{ message }}</div>
+                        </li>
+                </ul>
+            {% endif %}
+        {% endfor %}
         {% if current_user.is_authenticated %}
             <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}">Logout</a></p>
         {% else %}
@@ -96,24 +55,15 @@
                 <tbody>
                     {% for item in items %}
                         <tr>
-                            <td>{{ item.name }}</td>
+                            <td><a href="{{url_for('item_details',item_id=item.id)}}">{{ item.name }}</a></td>
                             <td>{{ item.location }}</td>
-                            <td>{{ item.status }}</td>
+                            <td>{{ availability[loop.index-1] }}</td>
                             <td>{{ item.borrower_name }}</td>
                             <td>{{ item.borrower_contact }}</td>
                             <td>{{ item.borrow_date.strftime('%Y-%m-%d') if item.borrow_date else '' }}</td>
                             <td>{{ item.return_date.strftime('%Y-%m-%d') if item.return_date else '' }}</td>
                             <td>
-                            {% if item.status == 'available' %}
                                 <a href="{{ url_for('book_item', item_id=item.id) }}">Book</a>
-                            {% elif item.status == 'booked' and current_user.is_admin %}
-                                | <a href="{{ url_for('lend_item', item_id=item.id) }}">Mark as Lent</a>
-                                | <a href="{{ url_for('return_item', item_id=item.id) }}">Deny Booking</a>
-                            {% elif item.status == 'booked' and current_user.is_authenticated == False %}
-                                 <p>Waiting...</p>
-                            {% elif item.status == 'lent' and current_user.is_admin %}
-                                | <a href="{{ url_for('return_item', item_id=item.id) }}">Mark as Returned</a>
-                            {% endif %}
                             {% if current_user.is_admin %}
                                 | <a href="{{ url_for('delete_item', item_id=item.id) }}">Delete</a>
                                 | <a href="{{ url_for('edit_item', item_id=item.id) }}">Edit</a>
