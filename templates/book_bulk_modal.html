@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-<form method="post" action="{{ url_for('book_item',item_id=item.id) }}">
+<form method="post" action="{{ url_for('book_bulk', items=items) }}">
     <h1>Book Item</h1>
     {% for category, message in get_flashed_messages(with_categories=True) %}
         {% if message %}
@@ -28,7 +28,6 @@
 
     <button type="submit" class="booking">Submit Booking</button>
 </form>
-
 
 <script>
     // Example disabled dates: ["2023-01-01", "2023-01-02"]

@@ -1,25 +1,23 @@
-# booking
+# Booking System
 
 
 ## TODO:
 * Bulk booking, by checking a ceckbox
-* Email notifications
 * Grouping items and show qty available ?
-* Possiblity to book in advance even if item is lent now. 
-* make an item's page
 * Categories
 * Booking rooms in the same website.
 * Connect to Google calendar
 * Note on return about state of item
 * Comments on items page
-* some items are not bookable.
+* Some items are not bookable.
+* Add [random] colours to booking table to display on the fullcalendar
 
 
 
 
 ## DB migration
 
-1. Install Flask-Migratte
+1. Install Flask-Migrate
 
 ` pip install Flask-Migrate`
 

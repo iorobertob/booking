@@ -42,9 +42,9 @@
         <h2>{{item.name}}</h2>
          <div class="mb-3 d-flex justify-content-end">
             {% if current_user.is_authenticated and current_user.is_admin %}
-                <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-primary me-2" style="background-color: #34495e;">Edit</a>
+                <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-primary me-2" style="background-color: #34495e; border: none">Edit</a>
             {% endif %}
-            <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary" style="background-color: #34495e;">Book</a>
+            <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Book</a>
         </div>
             <h3>Future Bookings:</h3>
             <table id="bookingTable">
@@ -55,7 +55,9 @@
                         <th>Return Date</th>
                         <th>Borrower Email</th>
                         <th>Status</th>
+                        {% if current_user.is_admin %}
                         <th>Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -66,16 +68,19 @@
                             <td>{{ booking.return_date.strftime('%Y-%m-%d') if booking.return_date else '' }}</td>
                             <td>{{ booking.borrower_contact }}</td>
                             <td>{{ booking.status }}</td>
-                            <td>
-                            {% if booking.status == 'booked' and current_user.is_admin %}
-                                | <a href="{{ url_for('lend_item', booking_id=booking.id) }}">Mark as Lent</a>
-                                | <a href="{{ url_for('return_item', booking_id=booking.id) }}">Deny Booking</a>
-                            {% elif booking.status == 'booked' and current_user.is_authenticated == False %}
-                                 <p>Booked</p>
-                            {% elif booking.status == 'lent' and current_user.is_admin %}
-                                | <a href="{{ url_for('return_item', booking_id=booking.id) }}">Mark as Returned</a>
+                            {% if current_user.is_admin %}
+                                <td>
+                                {% if booking.status == 'booked' and current_user.is_admin %}
+                                    | <a href="{{ url_for('lend_item', booking_id=booking.id) }}">Mark as Lent</a>
+                                    | <a href="{{ url_for('return_item', booking_id=booking.id) }}">Deny Booking</a>
+                                {% elif booking.status == 'booked' and current_user.is_authenticated == False %}
+                                     <p>Booked</p>
+                                {% elif booking.status == 'lent' and current_user.is_admin %}
+                                    | <a href="{{ url_for('return_item', booking_id=booking.id) }}">Mark as Returned</a>
+                                {% endif %}
+                                </td>
                             {% endif %}
-                        </td>
+                        
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -119,6 +124,8 @@
         var bookingDates  = {{ booking_dates | tojson | safe }};
 
         var events = bookingDates.map(function(bookingDates) {
+            var rand = Math.floor(Math.random() * 10);
+            var colorQ = "rgb(" + (215 - rand * 3) + "," + (185 - rand * 5) + "," + (185 - rand * 10) + " )"; 
 
             return {
                 title: bookingDates.borrower_name,
@@ -127,7 +134,8 @@
                 end: new Date(new Date(bookingDates.return_date).getTime() + 86400000), // Add one day to include the return date
                 display: "background",
                 allDay:true,
-                color: "#2340af" // Grey out color
+                // color: "#2340af" // Grey out color
+                color: colorQ,
             };
         });
 

@@ -114,7 +114,13 @@ def load_user(user_id):
 def home():
     items = Item.query.all()
     availability = check_all_items_availability()
-    return render_template('home.html', items=items, availability=availability)
+
+    bookings = []
+    for item in items:
+        item_bookings = Booking.query.filter_by(item_id = item.id, status = "lent").first()
+        bookings.append(item_bookings)
+
+    return render_template('home.html', items=items, availability=availability, bookings = bookings)
 
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -123,7 +129,7 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
-        print(str(current_user))
+
         if user and check_password_hash(user.password, password):
             response = login_user(user, remember=True)
             print(response)
@@ -184,6 +190,31 @@ def is_item_available(item_id, start_date, end_date):
     ).all()
     return len(bookings) == 0
 
+# Function to get bookings
+def get_bookings_list(item_id):
+    # Fetch all bookings from the database
+    bookings_query = Booking.query.filter_by(item_id=item_id).all()
+    
+    # Initialize an empty list to hold booking dictionaries
+    bookings_list = []
+    
+    # Iterate over the fetched bookings and add them to the list as dictionaries
+    for booking in bookings_query:
+        booking_dict = {
+            "borrow_date": booking.borrow_date,
+            "return_date": booking.return_date,
+            "borrower_name":booking.borrower_name
+        }
+        bookings_list.append(booking_dict)
+    
+    return bookings_list
+
+# Function to generate all dates between two dates, inclusive of both start and end dates
+def get_all_dates_between(start_date, end_date):
+    delta = end_date - start_date       # timedelta
+    return [start_date + timedelta(days=i) for i in range(delta.days + 1)]
+
+
 @app.route('/book/<int:item_id>', methods=['GET', 'POST'])
 def book_item(item_id):
     # Displaying the booking form
@@ -227,7 +258,7 @@ def book_item(item_id):
                                 subject       = "Booking - Do Not Reply",
                                 text_content  = "",
                                 html_content  = "",
-                                items         = items )
+                                items         = items)
         
             flash(f'Item {item.name} booked successfully!', 'success')
             return redirect(url_for('home'))
@@ -241,29 +272,70 @@ def book_item(item_id):
 
     return render_template('book_item.html', item=item, booked_dates=booked_dates_str)
 
-# Function to get bookings
-def get_bookings_list(item_id):
-    # Fetch all bookings from the database
-    bookings_query = Booking.query.filter_by(item_id=item_id).all()
-    
-    # Initialize an empty list to hold booking dictionaries
-    bookings_list = []
-    
-    # Iterate over the fetched bookings and add them to the list as dictionaries
-    for booking in bookings_query:
-        booking_dict = {
-            "borrow_date": booking.borrow_date,
-            "return_date": booking.return_date,
-            "borrower_name":booking.borrower_name
-        }
-        bookings_list.append(booking_dict)
-    
-    return bookings_list
+# Bulk booking
+@app.route('/book_bulk', methods=['POST','GET'])
+def book_bulk():
+    items = request.args.getlist('items')
+    action = request.args.get('action')
+    if action == "book":
+        # Process booking for items
+        all_booking_dates = []
+        for item in items:
+            bookings     = get_bookings_list(item_id=item)
+            booked_dates = []
+            for booking in bookings:
+                booked_dates.extend(get_all_dates_between(booking["borrow_date"], booking["return_date"]))
+            # Convert dates to string format
+            booked_dates_str = [date.strftime('%Y-%m-%d') for date in booked_dates]
 
-# Function to generate all dates between two dates, inclusive of both start and end dates
-def get_all_dates_between(start_date, end_date):
-    delta = end_date - start_date       # timedelta
-    return [start_date + timedelta(days=i) for i in range(delta.days + 1)]
+            all_booking_dates += booked_dates_str
+  
+        return render_template('book_bulk.html', items=items, booked_dates=all_booking_dates)
+
+    elif action == "delete":
+        # Process deletion for selected items
+        return redirect(url_for('home'))
+
+    if request.method == 'POST':
+        items = request.args.getlist('items')
+        booked_dates = request.args.getlist('booked_dates')
+
+        # Process the booking form
+        borrower_name = request.form.get('borrower_name')
+        borrower_contact = request.form.get('borrower_contact')
+        borrow_date = datetime.strptime(request.form.get('borrow_date'), '%Y-%m-%d')
+        return_date = datetime.strptime(request.form.get('return_date'), '%Y-%m-%d')
+
+        booked_items = []
+
+        for item_id in items:
+            item = Item.query.get_or_404(item_id)
+
+
+            if is_item_available(item_id, borrow_date, return_date):
+                # Proceed with booking
+                # item.status = 'booked'
+
+                new_booking = Booking(  item_id         =item_id, 
+                                        item_name       =item.name,
+                                        borrower_name   =borrower_name, 
+                                        borrower_contact=borrower_contact,
+                                        borrow_date     =borrow_date,
+                                        return_date     =return_date)
+
+                db.session.add(new_booking)
+                
+                booked_items += [item]
+
+            else:
+                flash(f'Selected dates are not available for booking.', 'danger')
+                return redirect(url_for('book_bulk',items=items, booked_dates=booked_dates))
+
+        db.session.commit()
+        flash(f'All item booked successfully!', 'success')
+        return redirect(url_for('home'))
+    return redirect(url_for('book_bulk',items=items, action="book"))
+
 
 # Lent item route (accessible only by admin users)
 @app.route('/lend/<int:booking_id>')
