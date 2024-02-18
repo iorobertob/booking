@@ -5,4 +5,5 @@ Werkzeug
 pymysql
 gunicorn
 mailersend
+Flask-Migrate
 

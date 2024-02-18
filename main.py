@@ -2,25 +2,26 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from mailersend import emails
 import mailersend
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
-from datetime import datetime
+from datetime import datetime, timedelta
 import pymysql
 import json
 pymysql.install_as_MySQLdb()
 
-LOCALHOST = False
+LOCALHOST = True
 
 app = Flask(__name__, static_folder='images')
 
+# for prefix forwarding
 app.wsgi_app = ProxyFix(
     app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
 )
 
-app.config['APPLICATION_ROOT'] = '/booking'
-
-
+if not LOCALHOST:
+    app.config['APPLICATION_ROOT'] = '/booking'
 
 if LOCALHOST:
     vars_path = "vars/vars.json"
@@ -40,21 +41,35 @@ with open(vars_path, "r") as file:
     mailer = emails.NewEmail(str(vars_json.get("mailersend_api_key")))
     
 db = SQLAlchemy(app)
+
+migrate = Migrate(app, db)
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+class Booking(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    item_name = db.Column(db.String(100), nullable=False)
+    borrower_name = db.Column(db.String(100), nullable=False)
+    borrower_contact = db.Column(db.String(100), nullable=False)
+    borrow_date = db.Column(db.DateTime, nullable=False)
+    return_date = db.Column(db.DateTime, nullable=False)
+    status = db.Column(db.String(20), default='booked')
+    item = db.relationship('Item', back_populates='bookings')
 
 # Define the Item model
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(100), nullable=False)
-    status = db.Column(db.String(20), default='available')
-    borrower_name = db.Column(db.String(100), default='')
-    borrower_contact = db.Column(db.String(100), default='')
-    borrow_date = db.Column(db.DateTime, nullable=True)
-    return_date = db.Column(db.DateTime, nullable=True)
+    # borrower_name = db.Column(db.String(100), default='')
+    # borrower_contact = db.Column(db.String(100), default='')
+    # borrow_date = db.Column(db.DateTime, nullable=True)
+    # return_date = db.Column(db.DateTime, nullable=True)
     manual_link = db.Column(db.String(200), default='')
     photo_path = db.Column(db.String(200), default='')
+    bookings = db.relationship('Booking', order_by=Booking.id, back_populates='item')
 
 # Define the User model
 class User(UserMixin, db.Model):
@@ -63,15 +78,22 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(128), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
 
-@app.route('/booking/images/<path:filename>')
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'assets/images'),
+                          'favicon.ico',mimetype='image/vnd.microsoft.icon')
+
+@app.route('/booking/assets/<path:filename>')
 def custom_static(filename):
     # return render_template('login.html')
-    return send_from_directory('images', filename)
+    return send_from_directory('assets', filename)
 
-@app.route('/images/<path:filename>', methods=['GET', 'POST'])
+@app.route('/assets/<path:filename>', methods=['GET', 'POST'])
 def custom_images(filename):
     # return render_template('login.html')
-    return send_from_directory('images', filename)
+    return send_from_directory('assets/images', filename)
 
 # Create an admin user
 def create_admin_user():
@@ -91,7 +113,8 @@ def load_user(user_id):
 @app.route('/')
 def home():
     items = Item.query.all()
-    return render_template('home.html', items=items)
+    availability = check_all_items_availability()
+    return render_template('home.html', items=items, availability=availability)
 
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
@@ -124,29 +147,80 @@ def dashboard():
     items = Item.query.all()
     return render_template('dashboard.html', items=items)
 
-# Book item route
+# Items details 
+@app.route('/item/<int:item_id>')
+def item_details(item_id):
+    item = Item.query.get_or_404(item_id)
+    bookings = Booking.query.filter_by(item_id=item_id).all()
+
+    booking_dates = get_bookings_list(item_id=item_id)
+    booked_dates  = []
+    for booking in booking_dates:
+        booked_dates.extend(get_all_dates_between(booking["borrow_date"], booking["return_date"]))
+    # Convert dates to string format
+    booked_dates_str = [date.strftime('%Y-%m-%d') for date in booked_dates]
+    return render_template('item_details.html', item=item, bookings=bookings, booking_dates=booking_dates, booked_dates=booked_dates)
+
+def check_all_items_availability():
+    items = Item.query.all()
+    date  = datetime.now()
+    availability = []
+    for item in items:
+        if is_item_available(item.id,date, date):
+            availability.append("Available")
+        else:
+            availability.append("Lent/booked")
+    return availability
+
+# Check if item is available.
+def is_item_available(item_id, start_date, end_date):
+    bookings = Booking.query.filter(
+        Booking.item_id == item_id,
+        db.or_(
+            db.and_(Booking.borrow_date <= start_date, Booking.return_date >= start_date),
+            db.and_(Booking.borrow_date <= end_date, Booking.return_date >= end_date),
+            db.and_(Booking.borrow_date >= start_date, Booking.return_date <= end_date)
+        )
+    ).all()
+    return len(bookings) == 0
+
 @app.route('/book/<int:item_id>', methods=['GET', 'POST'])
 def book_item(item_id):
+    # Displaying the booking form
     item = Item.query.get_or_404(item_id)
 
+    bookings     = get_bookings_list(item_id=item_id)
+    booked_dates = []
+    for booking in bookings:
+        booked_dates.extend(get_all_dates_between(booking["borrow_date"], booking["return_date"]))
+    # Convert dates to string format
+    booked_dates_str = [date.strftime('%Y-%m-%d') for date in booked_dates]
+
     if request.method == 'POST':
+        # Process the booking form
         borrower_name = request.form.get('borrower_name')
         borrower_contact = request.form.get('borrower_contact')
         borrow_date = datetime.strptime(request.form.get('borrow_date'), '%Y-%m-%d')
         return_date = datetime.strptime(request.form.get('return_date'), '%Y-%m-%d')
-        
-        item.status = 'booked'
-        item.borrower_name = borrower_name
-        item.borrower_contact = borrower_contact
-        item.borrow_date = borrow_date
-        item.return_date = return_date
-        
-        db.session.commit()
 
+        if is_item_available(item_id, borrow_date, return_date):
+            # Proceed with booking
+            item.status = 'booked'
 
-        items  = [item]
+            new_booking = Booking(  item_id         =item_id, 
+                                    item_name       =item.name,
+                                    borrower_name   =borrower_name, 
+                                    borrower_contact=borrower_contact,
+                                    borrow_date     =borrow_date,
+                                    return_date     =return_date)
 
-        response = send_email(  borrower_email= borrower_contact,
+            db.session.add(new_booking)
+            db.session.commit()
+
+            items = [item]
+
+            # Send email and flash success message
+            response = send_email(  borrower_email= borrower_contact,
                                 borrower_name = borrower_name,
                                 borrow_date   = borrow_date.date(),
                                 return_date   = return_date.date(),
@@ -155,43 +229,71 @@ def book_item(item_id):
                                 html_content  = "",
                                 items         = items )
         
-        flash(f'Item {item.name} booked successfully!', 'success')
-        return redirect(url_for('home'))
+            flash(f'Item {item.name} booked successfully!', 'success')
+            return redirect(url_for('home'))
+        
+        else:
+            flash(f'Selected dates are not available for booking.', 'danger')
+            return redirect(url_for('book_item', item_id=item_id))
 
-    return render_template('book_item.html', item=item)
+        return redirect(url_for('book_item', item_id=item_id))
+        
+
+    return render_template('book_item.html', item=item, booked_dates=booked_dates_str)
+
+# Function to get bookings
+def get_bookings_list(item_id):
+    # Fetch all bookings from the database
+    bookings_query = Booking.query.filter_by(item_id=item_id).all()
+    
+    # Initialize an empty list to hold booking dictionaries
+    bookings_list = []
+    
+    # Iterate over the fetched bookings and add them to the list as dictionaries
+    for booking in bookings_query:
+        booking_dict = {
+            "borrow_date": booking.borrow_date,
+            "return_date": booking.return_date,
+            "borrower_name":booking.borrower_name
+        }
+        bookings_list.append(booking_dict)
+    
+    return bookings_list
+
+# Function to generate all dates between two dates, inclusive of both start and end dates
+def get_all_dates_between(start_date, end_date):
+    delta = end_date - start_date       # timedelta
+    return [start_date + timedelta(days=i) for i in range(delta.days + 1)]
 
 # Lent item route (accessible only by admin users)
-@app.route('/lend/<int:item_id>')
+@app.route('/lend/<int:booking_id>')
 @login_required
-def lend_item(item_id):
+def lend_item(booking_id):
     if not current_user.is_admin:
         flash('Permission denied. You do not have admin privileges.', 'danger')
         return redirect(url_for('dashboard'))
 
-    item = Item.query.get_or_404(item_id)
-    item.status = 'lent'
+    booking = Booking.query.get_or_404(booking_id)
+    booking.status = 'lent'
     db.session.commit()
     
-    flash(f'Item {item.name} marked as lent!', 'success')
+    flash(f'Item {booking.item_name} marked as lent!', 'success')
     return redirect(url_for('home'))
 
 # Return item route (accessible only by admin users)
-@app.route('/return/<int:item_id>')
+@app.route('/return/<int:booking_id>')
 @login_required
-def return_item(item_id):
+def return_item(booking_id):
     if not current_user.is_admin:
         flash('Permission denied. You do not have admin privileges.', 'danger')
         return redirect(url_for('dashboard'))
 
-    item = Item.query.get_or_404(item_id)
-    item.status = 'available'
-    item.borrower_name = ''
-    item.borrower_contact = ''
-    item.borrow_date = None
-    item.return_date = None
+    booking_to_delete = Booking.query.get_or_404(booking_id)
+    name_of_deleted_item = booking_to_delete.item_name
+    db.session.delete(booking_to_delete)
     db.session.commit()
     
-    flash(f'Item {item.name} marked as returned!', 'success')
+    flash(f'Item {name_of_deleted_item} marked as returned!', 'success')
     return redirect(url_for('home'))
 
 # Add item route (accessible only by admin users)
@@ -265,7 +367,7 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     mail_body = {}
 
     # Assuming you're passing variables like 'name' and 'booking_date' to your template
-    html_content = render_template('booking.html', 
+    html_content = render_template('booking_email.html', 
                                     borrower_name  = borrower_name, 
                                     borrower_email = borrower_email,
                                     borrow_date = borrow_date,
@@ -288,22 +390,26 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     ]
 
     bcc = [
-        {
-            "name": "Edvinas",
-            "email": "edvinas.siliunas@lmta.lt",
-        },
+        # {
+        #     "name": "Edvinas",
+        #     "email": "edvinas.siliunas@lmta.lt",
+        # },
+        # {
+        #     "name": "Edvinas Gmail",
+        #     "email": "siliunas.edvinas@gmail.com",
+        # },
         {
             "name": "Roberto",
             "email": "roberto.becerra@lmta.lt",
         },
-        {
-            "name": "Julius",
-            "email": "julius.aglinskas@lmta.lt",
-        },
-        {
-            "name": "Mantautas",
-            "email": "mantautas.krukauskas@lmta.lt",
-        }
+        # {
+        #     "name": "Julius",
+        #     "email": "julius.aglinskas@lmta.lt",
+        # },
+        # {
+        #     "name": "Mantautas",
+        #     "email": "mantautas.krukauskas@lmta.lt",
+        # }
     ]
 
     reply_to = [

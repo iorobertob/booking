@@ -1,0 +1,57 @@
+<!-- CALENDAR INTERFACE -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+<form method="post" action="{{ url_for('book_item',item_id=item.id) }}">
+    <h1>Book Item</h1>
+    {% for category, message in get_flashed_messages(with_categories=True) %}
+        {% if message %}
+            <ul>
+                    <li>
+                    <div class="alert alert-{{category}}">{{ message }}</div>
+                    </li>
+            </ul>
+        {% endif %}
+    {% endfor %}
+    
+    <label for="borrower_name">Your Name:</label>
+    <input type="text" id="borrower_name" name="borrower_name" required><br>
+    <label for="borrower_contact">Your Email:</label>
+    <input type="email" id="borrower_contact" name="borrower_contact" required><br>
+
+    <label for="borrow_date">Borrow Date:</label>
+    <input type="date" id="borrow_date" name="borrow_date" required><br>
+    <!-- <input type="date" id="borrow_date" name="borrow_date" required><br> -->
+    <label for="return_date">Return Date:</label>
+    <!-- <input type="date" id="return_date" name="return_date" required><br>        -->
+    <input type="text" id="return_date" name="return_date" required><br>
+
+    <button type="submit" class="booking">Submit Booking</button>
+</form>
+
+
+
+<script>
+    // Example disabled dates: ["2023-01-01", "2023-01-02"]
+    var disabledDates = {{ booked_dates|tojson }}; // Ensure you pass this from Flask
+
+    var returnDatePicker = flatpickr("#return_date", {
+        "disable": disabledDates,
+        "dateFormat": "Y-m-d",
+    });
+
+    flatpickr("#borrow_date", {
+        "disable": disabledDates,
+        "dateFormat": "Y-m-d",
+        onChange: function(selectedDates, dateStr, instance) {
+            // Update the minDate for the return date picker
+            returnDatePicker.set("minDate", dateStr);
+        }
+    });
+
+    function updateReturnDatePickerMinDate(dateStr) {
+        returnDatePicker.set("minDate", dateStr);
+}
+
+    
+</script>
