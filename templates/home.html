@@ -35,13 +35,21 @@
             {% endif %}
         {% endfor %}
         {% if current_user.is_authenticated %}
-            <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}">Logout</a></p>
+            <p>Welcome, {{ current_user.username }}! <a href="{{ url_for('logout') }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Logout</a></p>
         {% else %}
-            <p>Welcome. <a href="{{ url_for('login') }}">Login</a></p>
+            <p>Welcome. <a href="{{ url_for('login') }}" class="btn btn-primary me-2 booking" style="background-color: #34495e; border: none;">Login</a></p>
+
         {% endif %}
+            <div class="mb-3 d-flex justify-content-end">
+                {% if current_user.is_authenticated and current_user.is_admin %}
+                    <a href="{{ url_for('edit_item', item_id='1') }}" onclick="bookSelectedItems('delete')" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Delete Selected</a>
+                {% endif %}
+                <a href="javascript:void(0);" onclick="bookSelectedItems('book')" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Book Selected</a>
+            </div>
             <table id="bookingTable">
                 <thead>
                     <tr>
+                        <th></th>
                         <th>Name</th>
                         <th>Location</th>
                         <th>Status</th>
@@ -55,13 +63,14 @@
                 <tbody>
                     {% for item in items %}
                         <tr>
-                            <td><a href="{{url_for('item_details',item_id=item.id)}}">{{ item.name }}</a></td>
+                            <td><input class="form-check-input item-checkbox" type="checkbox" value="{{item.id}}" id="checkbox_{{item.id}}"></td>
+                            <td><a href="{{url_for('item_details',item_id=item.id)}}"> {{ item.name }}</a></td>
                             <td>{{ item.location }}</td>
                             <td>{{ availability[loop.index-1] }}</td>
-                            <td>{{ item.borrower_name }}</td>
-                            <td>{{ item.borrower_contact }}</td>
-                            <td>{{ item.borrow_date.strftime('%Y-%m-%d') if item.borrow_date else '' }}</td>
-                            <td>{{ item.return_date.strftime('%Y-%m-%d') if item.return_date else '' }}</td>
+                            <td>{{ bookings[loop.index-1].borrower_name }}</td>
+                            <td>{{ bookings[loop.index-1].borrower_contact }}</td>
+                            <td>{{ bookings[loop.index-1].borrow_date.strftime('%Y-%m-%d') if bookings[loop.index-1].borrow_date else '' }}</td>
+                            <td>{{ bookings[loop.index-1].return_date.strftime('%Y-%m-%d') if bookings[loop.index-1].return_date else '' }}</td>
                             <td>
                                 <a href="{{ url_for('book_item', item_id=item.id) }}">Book</a>
                             {% if current_user.is_admin %}
@@ -86,8 +95,39 @@
         $(document).ready(function() {
             $('#bookingTable').dataTable({
                 responsive:true,
+                select: {
+                    style: 'os',
+                    selector: 'td:first-child'
+                }
             });
         });
+
+        function bookSelectedItems(action) {
+            // Collect all checked checkboxes.
+            let checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
+            
+            // Extract the value (item ID) from each checked checkbox.
+            let selectedIds = Array.from(checkedBoxes).map(box => box.value);
+            
+            // Convert the array of IDs into a comma-separated string to pass as a query parameter.
+            let idsQueryParam = selectedIds.join('&items=');
+            // idsQueryParam="[(2),(5),(6)]"
+
+            // Redirect to the book_bulk route with the selected item IDs as a query parameter.
+            // Adjust this URL as needed for your app's routing structure.
+            if (action == 'book'){
+                window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=book";
+                console.log(idsQueryParam)
+            }
+            else{
+                window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=delete";
+            }
+            
+        }
     </script>
+    <script>
+
+</script>
+
 </body>
 </html>

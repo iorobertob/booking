@@ -1,3 +1,6 @@
+a{
+    text-decoration: none;
+}
 .header {
     display: flex;
     align-items: center;
@@ -11,8 +14,17 @@
     flex-grow: 1; /* Allows title to take the remaining width */
 }
 
+hr {
+  border: none;
+  height: 0.2px;
+  /* Set the hr color */
+  color: #333;  /* old IE */
+  background-color: #333;  /* Modern Browsers */
+}
+
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Trebuchet MS', sans-serif;
+/*    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;*/
     margin: 0;
     padding: 0;
     background-color: #f4f4f4;
@@ -66,6 +78,7 @@ button.booking {
     cursor: pointer;
     margin-top: 20px;
     width: 100%;
+    border: none !important;
 }
 button:hover {
     background-color: #2c3e50;
@@ -92,7 +105,7 @@ a {
     text-decoration: none;
 }
 a:hover {
-    text-decoration: underline;
+/*    text-decoration: underline;*/
 }
 
 .alert {
@@ -102,26 +115,31 @@ a:hover {
   margin-bottom: 16px;
   border-width: 2px;
   border-style: solid;
+  border-width: thin;
 }
 
 .alert-error {
   border-color: darkred;
   background-color: red;
   color: white;
+  border-width: thin;
 }
 .alert-danger {
   border-color: darkred;
   background-color: darkred;
   color: white;
+  border-width: thin;
 }
 
 .alert-info {
   border-color: orange;
   background-color: yellow;
-  color: black;
+  color: white;
+  border-width: thin;
 }
 .alert-success {
   border-color: green;
   background-color: lightgreen;
-  color: black;
+  color: white;
+  border-width: thin;
 }
