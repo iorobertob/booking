@@ -332,6 +332,17 @@ def book_bulk():
                 return redirect(url_for('book_bulk',items=items, booked_dates=booked_dates))
 
         db.session.commit()
+
+        # Send email and flash success message
+        response = send_email(  borrower_email= borrower_contact,
+                            borrower_name = borrower_name,
+                            borrow_date   = borrow_date.date(),
+                            return_date   = return_date.date(),
+                            subject       = "Booking - Do Not Reply",
+                            text_content  = "",
+                            html_content  = "",
+                            items         = booked_items)
+            
         flash(f'All item booked successfully!', 'success')
         return redirect(url_for('home'))
     return redirect(url_for('book_bulk',items=items, action="book"))
