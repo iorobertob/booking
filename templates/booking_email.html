@@ -208,7 +208,7 @@ body, table, td, p, a, li, blockquote {
 								<table cellpadding="0" cellspacing="0" border="0" align="center" role="presentation">
 								<tr>
 									<td align="center">
-										<img src="https://misc.lmta.lt/booking/assets/images/misc_logo_alpha.png" alt="Logo" width="220" height="auto" class="logo">
+										<img src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}" alt="Logo" width="220" height="auto" class="logo">
 									</td>
 								</tr>
 								</table>
@@ -240,7 +240,7 @@ body, table, td, p, a, li, blockquote {
 		<tbody>
 		<tr>
 			<td align="center">
-				<img src="https://misc.lmta.lt/booking/assets/images/invoice-order-icon.png" alt="Section Image" width="120" height="120" class="alert-icon">
+				<img src="{{ url_for('custom_static', filename='images/invoice-order-icon.png')}}" alt="Section Image" width="120" height="120" class="alert-icon">
 			</td>
 		</tr>
 		</tbody>
@@ -415,7 +415,7 @@ body, table, td, p, a, li, blockquote {
 				<tbody>
 				<tr class="social-icons">
 					<td style="padding:0 10px 0 10px;">
-						<a href="https://www.facebook.com/LMTAMiSC" target="_blank"><img src="https://misc.lmta.lt/booking/assets/images/social-facebook-white.png" alt="Social Icons" width="30" height="30" class="social-icon"></a>
+						<a href="https://www.facebook.com/LMTAMiSC" target="_blank"><img src="{{ url_for('custom_static', filename='images/social-facebook-white.png')}}" alt="Social Icons" width="30" height="30" class="social-icon"></a>
 					</td>
 <!-- 					<td style="padding:0 10px 0 10px;;">
 						<a href="https://www.MailerSend.com/" target="_blank"><img src="../assets/social-twitter-white.png" alt="Social Icons" width="30" height="30" class="social-icon"></a>
