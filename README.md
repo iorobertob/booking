@@ -40,3 +40,9 @@ Or install al packages from requirements.txt
 6. Apply the migration:
 
 `flask db upgrade`
+
+
+
+## [Potential] Issues
+* When migrating the database, the flashed messages remain, and have to be force deleted. 
+* When migrating the database, user cannot log out. 

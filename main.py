@@ -119,7 +119,7 @@ def home():
     for item in items:
         item_bookings = Booking.query.filter_by(item_id = item.id, status = "lent").first()
         bookings.append(item_bookings)
-    session.pop('_flashes', None)
+    # session.pop('_flashes', None)
     return render_template('home.html', items=items, availability=availability, bookings = bookings)
 
 # Login route
