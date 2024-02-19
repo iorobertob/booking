@@ -85,7 +85,7 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'assets/images'),
                           'favicon.ico',mimetype='image/vnd.microsoft.icon')
 
-@app.route('/booking/assets/<path:filename>')
+@app.route('/assets/<path:filename>')
 def custom_static(filename):
     # return render_template('login.html')
     return send_from_directory('assets', filename)
@@ -132,7 +132,7 @@ def login():
 
         if user and check_password_hash(user.password, password):
             response = login_user(user, remember=True)
-            print(response)
+
             flash('Login successful', 'success')
             return redirect(url_for('home'))
         else:
@@ -342,7 +342,7 @@ def book_bulk():
                             text_content  = "",
                             html_content  = "",
                             items         = booked_items)
-            
+
         flash(f'All item booked successfully!', 'success')
         return redirect(url_for('home'))
     return redirect(url_for('book_bulk',items=items, action="book"))
