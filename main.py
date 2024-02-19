@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
+from flask import session, Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
 from mailersend import emails
 import mailersend
 from flask_sqlalchemy import SQLAlchemy
