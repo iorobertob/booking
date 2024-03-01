@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-<form method="post" action="{{ url_for('book_item',item_id=item.id) }}">
+<form method="post" action="{{ url_for('book_item',item_id=item.id) }}" id="booking_form">
     <h1>Book Item</h1>
     {% for category, message in get_flashed_messages(with_categories=True) %}
         {% if message %}
@@ -26,7 +26,9 @@
     <!-- <input type="date" id="return_date" name="return_date" required><br>        -->
     <input type="text" id="return_date" name="return_date" required><br>
 
-    <button type="submit" class="booking">Submit Booking</button>
+    <input type="hidden" name="action" id="formAction" value="">
+    <button type="button" class="booking" onclick="submitForm('book')" class="btn btn-primary">Book Selected</button>
+    <button type="button" class="booking" onclick="submitForm('add_to_cart')" class="btn btn-secondary">Add to Cart</button>
 </form>
 
 
@@ -50,7 +52,44 @@
 
     function updateReturnDatePickerMinDate(dateStr) {
         returnDatePicker.set("minDate", dateStr);
-}
+    }
+
+    function submitForm(actionType) {
+        // Set the action type in the hidden input
+        document.getElementById('formAction').value = actionType;
+
+        var isValidForm = document.forms['booking_form'].checkValidity();
+        if (isValidForm)
+        {
+            var returndate = document.getElementById('return_date').value
+            console.log(returndate);
+
+            var input = document.getElementById('return_date');
+            console.log(input.checkValidity());
+            input.setCustomValidity("p");
+            if(input.checkValidity()) {
+                console.log("returndate");
+                input.setCustomValidity("watch me break");
+                input.reportValidity();
+            }
+            document.forms['booking_form'].submit();
+        }
+        else
+        {
+            document.getElementById('booking_form').reportValidity();
+            return false;
+        }
+        
+        // Set form action based on the actionType
+        var form = document.getElementById('booking_form');
+        if (actionType === 'book') {
+            form.action = "{{ url_for('book_item',item_id=item.id) }}";
+        } else if (actionType === 'add_to_cart') {
+            form.action = "{{ url_for('book_item',item_id=item.id) }}";
+        }
+        // Submit the form
+        form.submit();
+    }
 
     
 </script>
