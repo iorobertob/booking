@@ -2,7 +2,8 @@
 
 
 ## TODO:
-* Bulk booking, by checking a ceckbox
+* Add cart
+* Bulk delete, by checking a ceckbox
 * Grouping items and show qty available ?
 * Categories
 * Booking rooms in the same website.
