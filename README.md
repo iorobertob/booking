@@ -2,6 +2,8 @@
 
 
 ## TODO:
+* Send only one aggregated reminder email, not one per borrowed item.
+* Decide whether or not to send remidner email to admins.?
 * Add cart - DONE
 * Add discard X button to flash messages
 * Bulk delete, by checking a box

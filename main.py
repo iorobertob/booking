@@ -789,7 +789,10 @@ def send_email(borrower_email, borrower_name, borrow_date, return_date, subject,
     mailer.set_mail_to(recipients, mail_body)
     mailer.set_plaintext_content(plain_text_content, mail_body)
     mailer.set_html_content(html_content, mail_body)
-    mailer.set_bcc_recipients(bcc, mail_body)
+
+    if type_of_mail == 'booking':
+        mailer.set_bcc_recipients(bcc, mail_body)
+
     mailer.set_reply_to(reply_to, mail_body)
 
     # Send the email
