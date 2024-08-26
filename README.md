@@ -2,8 +2,10 @@
 
 
 ## TODO:
-* Add cart
-* Bulk delete, by checking a ceckbox
+* Add cart - DONE
+* Add discard X button to flash messages
+* Bulk delete, by checking a box
+* Bulk deny booking, by checking a box
 * Grouping items and show qty available ?
 * Categories
 * Booking rooms in the same website.
@@ -12,7 +14,6 @@
 * Comments on items page
 * Some items are not bookable.
 * Add [random] colours to booking table to display on the fullcalendar
-
 
 
 
@@ -43,7 +44,24 @@ Or install al packages from requirements.txt
 `flask db upgrade`
 
 
+## Restart Gunicorn service
+booking.service
+1. sudo systemctl start booking.service
+2. sudo systemctl enable booking.service
+3. sudo systemctl daemon-reload
+
+
 
 ## [Potential] Issues
 * When migrating the database, the flashed messages remain, and have to be force deleted. 
 * When migrating the database, user cannot log out. 
+
+
+
+## Changelog
+
+### v2.0 - 20240826 
+- Added menu bar
+- Added cart functionality
+- Changes in layout
+- Added Bulk booking

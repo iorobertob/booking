@@ -255,17 +255,17 @@ body, table, td, p, a, li, blockquote {
 		<tbody>
 		<tr>
 			<td align="center" style="color:#45535C;padding:20px 40px 0 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:800;font-size:34px;-webkit-font-smoothing:antialiased;line-height:1.2;" class="table-container mobile-title">
-				 Booking confirmation
+				 Return reminder 
 			</td>
 		</tr>
 		<tr>
 			<td align="center" style="color:#45535C;padding:20px 40px 0 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:800;font-size:18px;-webkit-font-smoothing:antialiased;line-height:1.2;" class="table-container mobile-title">
-				 Here’s what you booked
+				 Here’s what you borrowed
 			</td>
 		</tr>
 		<tr>
 			<td align="center" style="color:#5a5a5a;padding:20px 40px 0 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:normal;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;" class="table-container">
-				 This is a list of items you have booked. This booking can still be cancelled by the administrator. Please pick up the items at the Music Innovation Studies Centre.
+				 This is a list of items you have borrowed. These items are due to be returned on {{return_date}}.
 			</td>
 		</tr>
 		</tbody>
@@ -302,13 +302,12 @@ body, table, td, p, a, li, blockquote {
 				<td bgcolor="#FFF" width="40" align="left" style="color:#5a5a5a;padding:10px 0 10px 0;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
 				</td>
 				<td bgcolor="#FFFFFF" align="left" style="color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:normal;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
-					 {{item.item_name}}
+					 {{item.name}}
 				</td>
 				<td bgcolor="#FFFFFF" align="right" style="color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
-					{{item.borrow_date.strftime('%Y-%m-%d')}} until {{item.return_date.strftime('%Y-%m-%d')}} 
+					 
 				</td>
 				<td bgcolor="#FFF" width="40" align="left" style="color:#5a5a5a;padding:10px 0 10px 0;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
-
 				</td>
 			</tr>
 			{% endfor %}
@@ -322,7 +321,7 @@ body, table, td, p, a, li, blockquote {
 				<td bgcolor="#FFFFFF" align="left" style="border-top:2px solid #CCCCCC;border-bottom:2px solid #CCCCCC;color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;" class="table-container">
 				</td>
 				<td bgcolor="#FFFFFF" align="right" style="border-top:2px solid #CCCCCC;border-bottom:2px solid #CCCCCC;color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:16px;-webkit-font-smoothing:antialiased;line-height:1.4;" class="table-container">
-					 
+					  {{return_date}}
 				</td>
 				<td bgcolor="#FFF" width="40" align="left" style="color:#5a5a5a;padding:10px 0 10px 0;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
 				</td>

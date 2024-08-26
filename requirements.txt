@@ -6,4 +6,6 @@ pymysql
 gunicorn
 mailersend
 Flask-Migrate
+jsonpickle
+APScheduler
 
