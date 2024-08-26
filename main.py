@@ -36,7 +36,7 @@ logger.addHandler(handler)
 
 pymysql.install_as_MySQLdb()
 
-LOCALHOST = True
+LOCALHOST = False
 
 app = Flask(__name__, static_folder='images')
 
