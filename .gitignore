@@ -10,3 +10,5 @@ __pycache__
 .DS_Store
 
 migrations/
+
+mails_sent_log.txt

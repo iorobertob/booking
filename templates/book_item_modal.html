@@ -25,8 +25,10 @@
     <label for="return_date">Return Date:</label>
     <!-- <input type="date" id="return_date" name="return_date" required><br>        -->
     <input type="text" id="return_date" name="return_date" required><br>
-
+    
+    <input type="hidden" id="itemsJSON" name="itemsJSON" value="">
     <input type="hidden" name="action" id="formAction" value="">
+    
     <button type="button" class="booking" onclick="submitForm('book')" class="btn btn-primary">Book Selected</button>
     <button type="button" class="booking" onclick="submitForm('add_to_cart')" class="btn btn-secondary">Add to Cart</button>
 </form>
@@ -72,7 +74,7 @@
                 input.setCustomValidity("watch me break");
                 input.reportValidity();
             }
-            document.forms['booking_form'].submit();
+            //document.forms['booking_form'].submit();
         }
         else
         {
@@ -82,10 +84,28 @@
         
         // Set form action based on the actionType
         var form = document.getElementById('booking_form');
+
         if (actionType === 'book') {
             form.action = "{{ url_for('book_item',item_id=item.id) }}";
         } else if (actionType === 'add_to_cart') {
-            form.action = "{{ url_for('book_item',item_id=item.id) }}";
+
+            form.action = "{{ url_for('item_details',item_id=item.id) }}";
+
+            var itemsJSON = [];
+
+            var borrowing_date  = document.getElementById("borrow_date").value;
+            var returning_date  = document.getElementById("return_date").value
+
+            item = JSON.parse({{item_for_cart |tojson|safe}});           
+
+            itemsJSON.push({id         : item.id,
+                            name       : item.name,
+                            location   : item.location,
+                            borrow_date: borrowing_date,
+                            return_date: returning_date});
+
+
+            document.getElementById("itemsJSON").value = JSON.stringify(itemsJSON);
         }
         // Submit the form
         form.submit();
