@@ -2,6 +2,7 @@
 
 
 ## TODO:
+* Ask for email AND phone from borrowers
 * Send only one aggregated reminder email, not one per borrowed item.
 * Decide whether or not to send remidner email to admins.?
 * Add cart - DONE
@@ -16,6 +17,7 @@
 * Comments on items page
 * Some items are not bookable.
 * Add [random] colours to booking table to display on the fullcalendar
+* Migrate to Django?
 
 
 
