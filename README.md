@@ -3,6 +3,12 @@
 
 ## TODO:
 * Ask for email AND phone from borrowers
+* Improve add to cart functionality, does not need name and contact every time. only on checkout. 
+* send email on aceptance or denial of bookings
+* specify if the status is clearly lent OR booked, not together
+* keep on sending reminders to return item for a long as it is "lent" and include that if its returned please ask the admin to mark it so. 
+* When adding items, the locations should be on a dropdown menu.
+* return to same page search/filter conditions when going back. 
 * Send only one aggregated reminder email, not one per borrowed item.
 * Decide whether or not to send remidner email to admins.?
 * Add cart - DONE
@@ -17,6 +23,7 @@
 * Comments on items page
 * Some items are not bookable.
 * Add [random] colours to booking table to display on the fullcalendar
+* Add the possibility to mark as lent or returned in bulk somehow
 * Migrate to Django?
 
 
