@@ -4,6 +4,7 @@ vars/*
 
 venv/*
 vemv
+venv
 
 __pycache__
 

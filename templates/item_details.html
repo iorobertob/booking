@@ -47,6 +47,8 @@
                 <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-primary me-2" style="background-color: #34495e; border: none">Edit</a>
             {% endif %}
             <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Book</a>
+            &nbsp;&nbsp;
+            <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Add to Cart</a>
         </div>
             <h3>Future Bookings:</h3>
             <table id="bookingTable">
