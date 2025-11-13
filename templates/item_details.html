@@ -6,11 +6,13 @@
     <title>MISC Booking</title>
     <!-- Include DataTables CSS and jQuery -->
 
-    <!-- BOOTSTRAP -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <!-- BOOTSTRAP 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!--     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script> -->
 
     <!-- DATATABLES -->
     <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
@@ -18,7 +20,6 @@
 
     <!-- CUSTOM CSS -->
     <link href="{{ url_for('custom_static', filename='css/booking.css') }}" rel="stylesheet">
-
 
     <!-- CALENDAR -->
     <link href='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.css' rel='stylesheet' />
@@ -28,6 +29,9 @@
     <script defer src='https://static.cloudflareinsights.com/beacon.min.js' ></script>
     <script src='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.js'></script>
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar/index.global.js'></script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 
 </head>
@@ -46,9 +50,12 @@
             {% if current_user.is_authenticated and current_user.is_admin %}
                 <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-primary me-2" style="background-color: #34495e; border: none">Edit</a>
             {% endif %}
-            <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Book</a>
+            <a class="btn btn-primary booking" id="add_to_cart" style="color:#fff; background-color: #34495e; border: none;">Add to Cart</a>
             &nbsp;&nbsp;
-            <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Add to Cart</a>
+            <!-- <a href="{{ url_for('book_item', item_id=item.id) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Book</a> -->
+            <a class="btn btn-primary booking" id="booking_button" style="color:#fff; background-color: #34495e; border: none;">Book</a>
+            &nbsp;&nbsp;
+            
         </div>
             <h3>Future Bookings:</h3>
             <table id="bookingTable">
@@ -96,22 +103,13 @@
             
     </div>
 
-    <!-- MODAL -->
-    <div class="modal fade" id="bookingModal" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="bookingModalLabel">Book Item</h5>
-            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-              <span aria-hidden="true">&times;</span>
-            </button>
-          </div>
-          <div class="modal-body">
-            {% include 'book_item_modal.html' %}
-          </div>
-        </div>
-      </div>
-    </div>
+    {% from 'macros.html' import book_modal %}
+
+    {{ book_modal('1', 'Book Item', False, item, 'bookingModal') }}
+
+
+    {{ book_modal('2', 'Add to Cart', True, item, 'cartModal') }}
+
 
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
@@ -122,8 +120,21 @@
     <script src="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.js"></script> 
 
 
+    <!-- CUSTOM MODAL JS -->
+    <script 
+    id  = "item_detail_modals_script" 
+    src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}" 
+    data-disabled_dates= "{{ booked_dates|tojson }}"
+    data-item_for_cart = '{{ item_for_cart|tojson }}'
+    data-action_cart   = "{{ url_for('item_details',item_id=item.id) }}"
+    data-action_book   = "{{ url_for('book_item'   ,item_id=item.id) }}"></script>
+
     <script>
     $(document).ready(function() {
+
+        // Define this FIRST
+        const isMobile = window.innerWidth < 768;
+
         // Convert booked dates to an array of event objects for FullCalendar
         var bookingDates  = {{ booking_dates | tojson | safe }};
 
@@ -144,43 +155,169 @@
         });
 
         const calendarEl = document.getElementById('calendar')
-        const calendar = new FullCalendar.Calendar(calendarEl,{
+        const calendar   = new FullCalendar.Calendar(calendarEl,{
+            // initialView: window.innerWidth < 768 ? 'timeGridDay' : 'dayGridMonth',
+            // aspectRatio: window.innerWidth < 768 ? 0.8 : 1.35,
+
             initialView: 'dayGridMonth',
             selectable: true,
+            selectMirror: true,
+            longPressDelay: 200, // in ms, how long you must press on touch to start selection
+            selectLongPressDelay: 200, // iOS-friendly version
+            selectMinDistance: 2, // how far you must drag before selection starts
+  
+            // suggested by chat gpt
+            height: 'auto',
+            expandRows: true,
+            contentHeight: 'auto',
+            themeSystem: 'bootstrap5', // optional, improves scaling
+            aspectRatio: isMobile ? 0.85 : 1.35,
+
             headerToolbar: {
                 left: 'prev,next today',
                 center: 'title',
-                right: 'dayGridMonth,timeGridWeek'
+                right: isMobile ? '' : 'dayGridMonth,timeGridWeek',
+                // right: 'dayGridMonth,timeGridWeek'
             },
+
+            // Block all days before today
+            validRange: {
+                start: new Date()   // or moment().format('YYYY-MM-DD')
+            },
+
             events: events,
             selectAllow: function(selectInfo) {
-                var start = selectInfo.startStr;
-                var end = selectInfo.endStr;
+
+                const start = selectInfo.start;
+                const end   = selectInfo.end;
 
                 // Check if any event overlaps with the selected date range
-                var isOverlap = calendar.getEvents().some(function(event) {
+                const isOverlap = calendar.getEvents().some(function(event) {
                     return (start < event.endStr && end > event.startStr);
                 });
+
+                // Block past days
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (start < today) return false;
+
 
                 return !isOverlap; // If there is an overlap, disallow selection
             },
             select: function (info) {
                         // Format the date as needed, here using YYYY-MM-DD format
-                        var selectedDate = moment(info.startStr).format('YYYY-MM-DD');
+                        const selectedDate = moment(info.startStr).format('YYYY-MM-DD');
 
                         // Update the return date picker's minDate
                         updateReturnDatePickerMinDate(selectedDate);
-                        
+
+                        const startDate = info.startStr;
+                        const endDate = moment(info.end).subtract(1, 'days').format('YYYY-MM-DD');
+
+                        // Format start & end dates as YYYY-MM-DD
+                        const borrowDate = moment(info.startStr).format('YYYY-MM-DD');
+                        const returnDate = moment(info.end).subtract(1, 'days').format('YYYY-MM-DD');
+
+                        // --- Update all borrow date fields ---
+                        document.querySelectorAll('.datepicker_borrow').forEach(input => {
+                            // Set raw input value
+                            input.value = borrowDate;
+
+                            // Update Flatpickr instance if present
+                            if (input._flatpickr) {
+                                input._flatpickr.setDate(borrowDate, true);
+                            }
+                        });
+
+                        // --- Update all return date fields ---
+                        document.querySelectorAll('.datepicker').forEach(input => {
+                            input.value = returnDate;
+
+                            if (input._flatpickr) {
+                                input._flatpickr.setDate(returnDate, true);
+                            }
+                        });
+
+                        // --- Update minDate logic for all return pickers ---
+                        if (typeof updateReturnDatePickerMinDate === 'function') {
+                            updateReturnDatePickerMinDate(borrowDate);
+                        }
+
+
+                        console.log("Selected:", startDate, "to", endDate);
+                        $('#bookingModal').modal('show');
+                                            
                         // Pre-populate the borrow_date field in the modal
-                        $('#bookingModal #borrow_date').val(selectedDate);
+                        $('#borrow_date_1').val(selectedDate);
                         
                         // Show the modal
                         $('#bookingModal').modal('show');
-            }            // Additional FullCalendar options ...
+            } ,           // Additional FullCalendar options ...
+
+
+
+            // --- For single-tap (mobile and desktop clicks)
+            dateClick: function(info) {
+                // Format the clicked date as YYYY-MM-DD
+                const selectedDate = moment(info.dateStr).format('YYYY-MM-DD');
+
+                // --- Update all borrow date fields ---
+                document.querySelectorAll('.datepicker_borrow').forEach(input => {
+                    input.value = selectedDate;
+                    if (input._flatpickr) {
+                        input._flatpickr.setDate(selectedDate, true);
+                    }
+                });
+
+                // --- Update minDate logic for all return pickers ---
+                if (typeof updateReturnDatePickerMinDate === 'function') {
+                    updateReturnDatePickerMinDate(selectedDate);
+                }
+                $('#bookingModal').modal('show');
+            },
+
+            // windowResize: function(view) {
+            //     if (window.innerWidth < 768) {
+            //       calendar.changeView('timeGridDay');
+            //     } else {
+            //       calendar.changeView('dayGridMonth');
+            //     }
+            //   },
+
+            //   // Optional: adjust height
+            // height: 'auto'
         });
         calendar.render()
 
         // TO DO: on hover over the rows highlight the calendar dates, and vice versa
+        var cart_button = document.getElementById("add_to_cart");
+        cart_button.onclick = function(){
+            $('#cartModal').modal('show');
+        }
+        var cart_button = document.getElementById("booking_button");
+        cart_button.onclick = function(){
+            $('#bookingModal').modal('show');
+        }
+
+        let pressTimer;
+        let isSelecting = false;
+
+        calendarEl.addEventListener('touchstart', function(e) {
+          pressTimer = setTimeout(() => {
+            isSelecting = true;
+            calendarEl.classList.add('fc-long-pressing');
+          }, 300);
+        });
+
+        calendarEl.addEventListener('touchend', function(e) {
+          clearTimeout(pressTimer);
+          if (isSelecting) {
+            isSelecting = false;
+            calendarEl.classList.remove('fc-long-pressing');
+          }
+        });
+
+
     });
     </script>
 
@@ -193,6 +330,7 @@
             });
         });
     </script>
+
 
 
 

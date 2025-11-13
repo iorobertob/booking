@@ -38,23 +38,6 @@
 
 <script>
     
-    document.addEventListener('DOMContentLoaded', (event) => {
-        // Get the form element
-        const form = document.getElementById('booking_form');
-
-        // Intercept the form submission
-        form.addEventListener('submit', function(event) {
-            
-            event.preventDefault(); // Prevent the form from submitting
-
-            updateJSON();
-
-            // Trigger the actual form submission
-            form.submit();
-            
-        });
-    });
-
     // Example disabled dates: ["2023-01-01", "2023-01-02"]
     var disabledDates = {{ booked_dates|tojson }}; // Ensure you pass this from Flask
 
@@ -76,41 +59,55 @@
         returnDatePicker.set("minDate", dateStr);
     }
 
+    document.addEventListener('DOMContentLoaded', (event) => {
+        // Get the form element
+        const form = document.getElementById('booking_form');
+
+        // Intercept the form submission
+        form.addEventListener('submit', function(event) {
+
+            event.preventDefault(); // Prevent the form from submitting
+
+            updateJSON();
+
+            // Trigger the actual form submission
+            form.submit();
+            
+        });
+    });
+
     function updateJSON(){
+
         var borrowing_date  = document.getElementById("borrow_date").value;
-            var returning_date  = document.getElementById("return_date").value;
-
-            // This is the solution to pass items back and forth as json betweeen flask and jinja2
-            var itemsJSON = [];
-            items = JSON.parse({{items |tojson|safe}});
-
-            items.forEach(item => {
-                itemsJSON.push({id         : item.id,
-                                name       : item.name,
-                                location   : item.location,
-                                borrow_date: borrowing_date,
-                                return_date: returning_date});
-            });
-            document.getElementById("itemsJSON").value = JSON.stringify(itemsJSON);
+        var returning_date  = document.getElementById("return_date").value;
+        
+        items = JSON.parse({{items |tojson|safe}});
+        const   itemsArray = Array.isArray(items) ? items : [items];
+        var itemsJSON = [];
+        itemsArray.forEach(item => {
+            itemsJSON.push({id         : item.id,
+                            name       : item.name,
+                            location   : item.location,
+                            borrow_date: borrowing_date,
+                            return_date: returning_date});
+        });
+        document.getElementById("itemsJSON").value = JSON.stringify(itemsJSON);
     }
 
     function submitForm(actionType) {
         // Set the action type in the hidden input
         document.getElementById('formAction').value = actionType;
-        console.log(actionType);
-
+        console.log("submitForm cart")
         // Validate form //////////////////////////////////////////
         var isValidForm = document.forms['booking_form'].checkValidity();
         if (isValidForm)
         {
             var returndate = document.getElementById('return_date').value
-            console.log(returndate);
 
             var input = document.getElementById('return_date');
-            console.log(input.checkValidity());
+            
             input.setCustomValidity("p");
             if(input.checkValidity()) {
-                console.log("returndate");
                 input.setCustomValidity("watch me break");
                 input.reportValidity();
             }

@@ -18,6 +18,10 @@
 
     <script src="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.js"></script> 
 
+    <!-- FLATPICKR -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
     <!-- CUSTOM CSS -->
     <link href="{{ url_for('custom_static', filename='css/booking.css') }}" rel="stylesheet">
 
@@ -29,10 +33,11 @@
 
         <a class="navbar-brand" href="{{ url_for('home') }}">
             <img class="image-brand" src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 100px;"/>
-            <h1>MISC's Equipment</h1>
             
         </a>
-
+        <a class="navbar-brand" href="{{ url_for('home') }}">
+            <h1>MISC's Equipment</h1>     
+        </a>
 
         {% for category, message in get_flashed_messages(with_categories=True) %}
             {% if message %}
@@ -92,9 +97,13 @@
             {% endif %}
     </div>
 
-    <!-- Include jQuery and DataTables JavaScript at the end of the body for faster loading -->
-    <!-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> -->
-    <!-- <script src="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.js"></script>  -->
+    {% from 'macros.html' import book_modal %}
+
+    {{ book_modal('1', 'Book Item', False, item, 'bookingModal') }}
+
+    <!-- CUSTOM MODAL JS -->
+  
+
     <script>
         $(document).ready(function() {
             $('#bookingTable').dataTable({
@@ -106,7 +115,7 @@
             });
         });
 
-        function bookSelectedItems(action) {
+        async function bookSelectedItems(action) {
             // Collect all checked checkboxes.
             let checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
             
@@ -115,19 +124,93 @@
             
             // Convert the array of IDs into a comma-separated string to pass as a query parameter.
             let idsQueryParam = selectedIds.join('&items=');
+            console.log(idsQueryParam);
             // idsQueryParam="[(2),(5),(6)]"
 
             // Redirect to the book_bulk route with the selected item IDs as a query parameter.
             // Adjust this URL as needed for your app's routing structure.
             if (action == 'book'){
-                window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=book";
-                console.log(idsQueryParam)
+                // window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=book";
+
+                const url = "{{ url_for('bulk_details') }}?&items=" + idsQueryParam + "&action=book";
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                      throw new Error(`Response status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+
+                    $('#bookingModal').modal('show');
+
+                    var form = document.getElementById("booking_form");
+
+                    updateJSON(form, result.items);
+                    updateBookedDates(form, result.booked_dates);
+
+                    loadModalScript()
+
+                } catch (error) {
+                    console.error(error.message);
+                }
+
             }
             else{
+                // this seems dangerous here...
                 window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=delete";
+            }   
+        }
+
+        function updateBookedDates(form, booked_dates){
+            form.elements['booked_dates'].value = booked_dates;
+        }
+
+        function updateJSON(form, items_json){
+
+            var borrowing_date  = form.elements['borrow_date'].value;
+            var returning_date  = form.elements['return_date'].value;
+            
+            // items_json is null when items_for_cart is given from flask
+            if (items_json == null ){
+                items = JSON.parse(data.item_for_cart || '{}');
+            }
+            else{
+                items = items_json;
             }
             
+            const   itemsArray = Array.isArray(items) ? items : [items];
+            var     itemsJSON = [];
+
+            itemsArray.forEach(item => {
+                itemsJSON.push({id         : item.id,
+                                name       : item.name,
+                                location   : item.location,
+                                borrow_date: borrowing_date,
+                                return_date: returning_date});
+            });
+
+            form.elements['itemsJSON'].value = JSON.stringify(itemsJSON);
+
         }
+
+        function loadModalScript() {
+            const script = document.createElement('script');
+            script.src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}";
+            script.id  = "item_detail_modals_script";
+
+            // Set data attributes
+            script.dataset.action_cart    = "{{ url_for('book_bulk') }}";
+            script.dataset.action_book    = "{{ url_for('book_bulk') }}";
+
+            // Optional: handle onload event
+            script.onload = () => {
+                console.log("item_detail_modals.js loaded!");
+                // You can now safely call functions defined in that file
+            };
+
+            document.body.appendChild(script);  // inject it into the DOM
+        }
+
     </script>
     <script>
 

@@ -3,7 +3,7 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <form method="post" action="{{ url_for('book_item',item_id=item.id) }}" id="booking_form">
-    <h1>Book Item</h1>
+    <h1>Add Item to Cart</h1>
     {% for category, message in get_flashed_messages(with_categories=True) %}
         {% if message %}
             <ul>
@@ -13,16 +13,6 @@
             </ul>
         {% endif %}
     {% endfor %}
-    
-    {% if show_add_to_cart != None %}
-    <label for="borrower_name">Your Name:</label>
-    <input type="text" id="borrower_name" name="borrower_name" required><br>
-    <label for="borrower_contact">Your Email:</label>
-    <input type="email" id="borrower_contact" name="borrower_contact" required><br>
-
-    <label for="borrower_phone">Your Phone</label>
-    <input type="tel" id="borrower_phone" name="borrower_phone" required><br>
-    {% endif %}
 
     <label for="borrow_date">Borrow Date:</label>
     <input type="date" id="borrow_date" name="borrow_date" class="datepicker" required><br>
@@ -34,12 +24,8 @@
     <input type="hidden" id="itemsJSON" name="itemsJSON" value="">
     <input type="hidden" name="action" id="formAction" value="">
     
-    {% if show_add_to_cart %}
-    <button type="button" class="booking" onclick="submitForm('add_to_cart', this.form)" class="btn btn-secondary">Add to Cart</button>
-    {% else %}
     <button type="button" class="booking" onclick="submitForm('book', this.form)" class="btn btn-primary">Book Selected</button>
-    {% endif %}
-    
+    <button type="button" class="booking" onclick="submitForm('add_to_cart', this.form)" class="btn btn-secondary">Add to Cart</button>
 </form>
 
 
@@ -51,10 +37,8 @@
         "disable": disabledDates,
         "dateFormat": "Y-m-d",
     });
-    console.log("returnDatePicker 1");
-    console.log(returnDatePicker);
 
-    flatpickr(".borrow_date", {
+    flatpickr(".datepicker", {
         "disable": disabledDates,
         "dateFormat": "Y-m-d",
         onChange: function(selectedDates, dateStr, instance) {
@@ -94,11 +78,10 @@
         }
         
         // Set form action based on the actionType
-        var form = document.getElementById('booking_form');
+        // var form = document.getElementById('booking_form');
 
         if (actionType === 'book') {
             form.action = "{{ url_for('book_item',item_id=item.id) }}";
-
         } else if (actionType === 'add_to_cart') {
 
             form.action = "{{ url_for('item_details',item_id=item.id) }}";

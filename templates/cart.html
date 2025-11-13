@@ -32,7 +32,7 @@
 <div class="container">
     {% include 'flashes.html' %}
     <h2>Booking Cart</h2>
-    <table class="table">
+    <table  id="cartTable" class="table">
         <thead>
             <tr>
                 <th scope="col">#</th>
@@ -44,22 +44,16 @@
             </tr>
         </thead>
         <tbody>
-            {% for item in items %}
-            <tr>
-                <th scope="row">{{ loop.index }}</th>
-                <td>{{ item.name }}</td>
-                <td>{{ item.location }}</td>
-                <td>{{ item.borrow_date }}</td>
-                <td>{{ item.return_date }}</td>
-                <td>
-                    <a href="{{ url_for('remove_from_cart', item_id=loop.index) }}" class="btn btn-danger btn-sm">Remove</a>
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="6">Your cart is empty</td>
-            </tr>
-            {% endfor %}
+                {% for item in items %}
+                <tr>
+                  <th scope="row">{{ loop.index }}</th>
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.location }}</td>
+                  <td>{{ item.borrow_date }}</td>
+                  <td>{{ item.return_date }}</td>
+                  <td><a href="{{ url_for('remove_from_cart', item_id=loop.index) }}" class="btn btn-danger btn-sm">Remove</a></td>
+                </tr>
+                {% endfor %}
         </tbody>
     </table>
     <form action="{{ url_for('book_bulk') }}" method="post" id="booking_form">
@@ -76,6 +70,19 @@
 </body>
 
 <script>
+    $(document).ready(function() {
+            $('#cartTable').dataTable({
+                responsive:true,
+                select: {
+                    style: 'os',
+                    selector: 'td:first-child'
+                },
+                language: {
+                    emptyTable: "Your cart is empty"
+                }
+            });
+    });
+
     function updateJSON(){
 
         // This is the solution to pass items back and forth as json betweeen flask and jinja2

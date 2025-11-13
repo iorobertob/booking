@@ -148,3 +148,53 @@ a:hover {
   color: white;
   border-width: thin;
 }
+
+/* Responsive FullCalendar adjustments */
+@media (max-width: 768px) {
+  .fc-toolbar {
+    flex-wrap: wrap;
+    justify-content: center !important;
+  }
+
+  .fc-toolbar-title {
+    font-size: 1.1rem !important;
+  }
+
+  .fc-button {
+    font-size: 0.8rem !important;
+    padding: 0.25rem 0.5rem !important;
+    height: auto !important;
+  }
+
+  .fc .fc-col-header-cell-cushion {
+    font-size: 0.75rem !important;
+    padding: 2px 4px !important;
+  }
+
+  .fc-daygrid-day-number {
+    font-size: 0.8rem !important;
+  }
+
+  .fc-daygrid-event {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* Highlighted drag mirror */
+.fc-highlight {
+  background: rgba(0, 123, 255, 0.6) !important; /* light blue overlay */
+  border-radius: 4px;
+  transition: background 0.1s ease-in-out;
+}
+
+.fc-long-pressing {
+  cursor: grabbing;
+  opacity: 0.95;
+  background-color: rgba(0,0,0,0.02);
+}
+
+#calendar {
+  max-height: 80vh;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
