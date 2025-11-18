@@ -1,6 +1,6 @@
 <!-- macros.html -->
 
-{% macro book_modal(modal_id, modal_title, show_add_to_cart, item, id) %}
+{% macro book_modal(modal_id, modal_title, show_add_to_cart, item, id, form_id) %}
 
 <div class="modal fade" id="{{id}}" tabindex="-1" aria-labelledby="bookingModalLabel" aria-hidden="true">
       <div class="modal-dialog">
@@ -13,18 +13,8 @@
           <div class="modal-body">
 
                 <!-- Here I removed the action attribute because it is set afterwards -->
-                <form method="post"  id="booking_form">
+                <form method="post"  id="{{form_id}}">
                 <h1>{{modal_title}}</h1>
-
-                {% for category, message in get_flashed_messages(with_categories=True) %}
-                    {% if message %}
-                        <ul>
-                            <li>
-                            <div class="alert alert-{{category}}">{{ message }}</div>
-                            </li>
-                        </ul>
-                    {% endif %}
-                {% endfor %}
                 
                 {% if not show_add_to_cart  %}
 
@@ -39,12 +29,15 @@
 
                 {% endif %}
 
+                {% if modal_id != '3'  %}
+
                 <label for="borrow_date">Borrow Date:</label>
                 <input type="date" id="borrow_date_{{modal_id}}" name="borrow_date" class="datepicker_borrow" required><br>
                 <!-- <input type="date" id="borrow_date" name="borrow_date" required><br> -->
                 <label for="return_date">Return Date:</label>
                 <!-- <input type="date" id="return_date" name="return_date" required><br>        -->
                 <input type="text" id="return_date_{{modal_id}}" name="return_date" class="datepicker" required><br>
+                {% endif %}
                 
                 <input type="hidden" name="itemsJSON"     id="itemsJSON"    value="">
                 <input type="hidden" name="booked_dates"  id="booked_dates" value="">

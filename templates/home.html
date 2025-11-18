@@ -50,9 +50,10 @@
 
             <div class="mb-3 d-flex justify-content-end">
                 {% if current_user.is_authenticated and current_user.is_admin %}
-                    <a href="{{ url_for('edit_item', item_id='1') }}" onclick="bookSelectedItems('delete')" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Delete Selected</a>
+                <a href="{{ url_for('add_item') }}"class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Add Item</a>
+                <a href="{{ url_for('edit_item', item_id='1') }}" onclick="bookSelectedItems('delete')" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Delete Selected</a>
                 {% endif %}
-                <a href="javascript:void(0);" onclick="bookSelectedItems('book')" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Book Selected</a>
+                <a href="javascript:void(0);" onclick="bookSelectedItems('book', null)" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Book Selected</a>
             </div>
             <hr>
             <table id="bookingTable">
@@ -77,11 +78,12 @@
                             <td>{{ item.location }}</td>
                             <td>{{ availability[loop.index-1] }}</td>
                             <td>{{ bookings[loop.index-1].borrower_name }}</td>
-                            <td>{{ bookings[loop.index-1].borrower_contact }}</td>
+                            <td>{{ bookings[loop.index-1].borrower_email }}</td>
                             <td>{{ bookings[loop.index-1].borrow_date.strftime('%Y-%m-%d') if bookings[loop.index-1].borrow_date else '' }}</td>
                             <td>{{ bookings[loop.index-1].return_date.strftime('%Y-%m-%d') if bookings[loop.index-1].return_date else '' }}</td>
                             <td>
-                                <a href="{{ url_for('book_item', item_id=item.id) }}">Book</a>
+                                <!-- <a href="{{ url_for('book_item', item_id=item.id) }}">Book</a> -->
+                                <a href="javascript:void(0);" onclick="bookSelectedItems('book', {{item.id}})" >Book</a>
                             {% if current_user.is_admin %}
                                 | <a href="{{ url_for('delete_item', item_id=item.id) }}">Delete</a>
                                 | <a href="{{ url_for('edit_item', item_id=item.id) }}">Edit</a>
@@ -91,20 +93,17 @@
                     {% endfor %}
                 </tbody>
             </table>
-            {% if current_user.is_admin %}
-                <p><a href="{{ url_for('add_item') }}">Add Item</a></p>
-                <p><a href="{{ url_for('admin_page') }}">Admin Page</a></p>
-            {% endif %}
+
     </div>
 
     {% from 'macros.html' import book_modal %}
 
-    {{ book_modal('1', 'Book Item', False, item, 'bookingModal') }}
-
-    <!-- CUSTOM MODAL JS -->
+    {{ book_modal('1', 'Book Item', False, item, 'bookingModal', 'booking_form') }}
   
-
     <script>
+ 
+        loadModalScript();
+
         $(document).ready(function() {
             $('#bookingTable').dataTable({
                 responsive:true,
@@ -115,22 +114,28 @@
             });
         });
 
-        async function bookSelectedItems(action) {
+        async function bookSelectedItems(action, item_id) {
             // Collect all checked checkboxes.
             let checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
-            
+            let selectedIds;
             // Extract the value (item ID) from each checked checkbox.
-            let selectedIds = Array.from(checkedBoxes).map(box => box.value);
+            if (item_id == null ){
+                selectedIds = Array.from(checkedBoxes).map(box => box.value);
+
+                if (selectedIds.length === 0) {
+                    // Redirect to the same page with a query parameter to trigger flash
+                    window.location.href = "/?flash=select_items";
+                    return;
+                }
+            }
+            else{
+                selectedIds = [item_id];
+            }
             
             // Convert the array of IDs into a comma-separated string to pass as a query parameter.
             let idsQueryParam = selectedIds.join('&items=');
-            console.log(idsQueryParam);
-            // idsQueryParam="[(2),(5),(6)]"
 
-            // Redirect to the book_bulk route with the selected item IDs as a query parameter.
-            // Adjust this URL as needed for your app's routing structure.
             if (action == 'book'){
-                // window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=book";
 
                 const url = "{{ url_for('bulk_details') }}?&items=" + idsQueryParam + "&action=book";
                 try {
@@ -146,9 +151,11 @@
                     var form = document.getElementById("booking_form");
 
                     updateJSON(form, result.items);
+                    
                     updateBookedDates(form, result.booked_dates);
 
-                    loadModalScript()
+                    // loadModalScript();
+                    initDatePickers();
 
                 } catch (error) {
                     console.error(error.message);
@@ -157,7 +164,7 @@
             }
             else{
                 // this seems dangerous here...
-                window.location.href = "{{ url_for('book_bulk') }}?&items=" + idsQueryParam + "&action=delete";
+                window.location.href = "{{ url_for('book') }}?&items=" + idsQueryParam + "&action=delete";
             }   
         }
 
@@ -166,7 +173,6 @@
         }
 
         function updateJSON(form, items_json){
-
             var borrowing_date  = form.elements['borrow_date'].value;
             var returning_date  = form.elements['return_date'].value;
             
@@ -199,13 +205,16 @@
             script.id  = "item_detail_modals_script";
 
             // Set data attributes
-            script.dataset.action_cart    = "{{ url_for('book_bulk') }}";
-            script.dataset.action_book    = "{{ url_for('book_bulk') }}";
+            script.dataset.action_cart    = "{{ url_for('book_cart') }}";
+            script.dataset.action_book    = "{{ url_for('book') }}";
 
             // Optional: handle onload event
             script.onload = () => {
-                console.log("item_detail_modals.js loaded!");
-                // You can now safely call functions defined in that file
+                // console.log("item_detail_modals.js loaded!");
+                // Now it is safe to call functions defined in this file
+                var info            = JSON.parse({{borrower_info |tojson|safe}});
+                const booking_form  = document.getElementById('booking_form');
+                loadBorrowerInfo(booking_form, info[0])
             };
 
             document.body.appendChild(script);  // inject it into the DOM

@@ -26,8 +26,6 @@
 <body>
     {% include 'nav.html' %}
 
-
-
 {% block content %}
 <div class="container">
     {% include 'flashes.html' %}
@@ -56,9 +54,11 @@
                 {% endfor %}
         </tbody>
     </table>
-    <form action="{{ url_for('book_bulk') }}" method="post" id="booking_form">
+    <form action="{{ url_for('book') }}" method="post" id="cart_form">
         <input type="hidden" id="itemsJSON" name="itemsJSON" value="">
         <input type="hidden" id="from_cart" name="from_cart" value="True">
+        <input type="hidden" name="action"  id="formAction" value="book">
+
         <button type="submit" class="btn btn-success">Book All</button>
     </form>
     <form action="{{ url_for('remove_from_cart', item_id='all') }}" method="post">
@@ -67,7 +67,10 @@
 </div>
 {% endblock %}
 
-</body>
+
+{% from 'macros.html' import book_modal %}
+
+{{ book_modal ('3', 'Contact Info', False, item, 'bookingModal', 'booking_form') }}
 
 <script>
     $(document).ready(function() {
@@ -83,7 +86,7 @@
             });
     });
 
-    function updateJSON(){
+    function updateJSON(form){
 
         // This is the solution to pass items back and forth as json betweeen flask and jinja2
         var itemsJSON = [];
@@ -93,28 +96,155 @@
             itemsJSON.push({id              : item.id,
                             name            : item.name,
                             borrower_name   : item.borrower_name,
-                            borrower_contact: item.borrower_contact, 
+                            borrower_email: item.borrower_email, 
+                            borrower_phone  : item.borrower_phone,
                             location        : item.location,
                             borrow_date     : item.borrow_date,
                             return_date     : item.return_date});
         });
-        document.getElementById("itemsJSON").value = JSON.stringify(itemsJSON);
+        console.log("items");
+        console.log(items);
+        // document.getElementById("itemsJSON").value = JSON.stringify(itemsJSON);
+        form.elements["itemsJSON"].value = JSON.stringify(itemsJSON);
+    }
+
+    async function submitForm(actionType, form) {
+
+        console.log("this form");
+        console.log(form);
+
+        // TODO: see if this can be DRY with the same function in item_detail_modals.js
+        var isValidForm = form.checkValidity();
+        if (isValidForm)
+        {
+            console.log("isValidForm");
+            // var returndate = form.elements['return_date'].value
+            
+            // var input = form.elements['return_date']
+            
+            // input.setCustomValidity("p");
+            // if(input.checkValidity()) {
+            //     input.setCustomValidity("watch me break");
+            //     input.reportValidity();
+            // }
+        }
+        else
+        {
+            form.reportValidity();
+            return false;
+        }
+
+
+        form.elements['formAction'].value = actionType;
+
+        // Set form action based on the actionType
+        if (actionType === 'book') {
+
+            form.action = "{{ url_for('book') }}";
+
+        }
+
+        updateJSON(form);
+
+        var name    = form.elements['borrower_name'].value;
+        var contact = form.elements['borrower_email'].value;
+        var phone   = form.elements['borrower_phone'].value;
+        
+        const result = await setBorrowerInfoOnBackend(name, contact, phone, form); 
+
+        // Submit the form
+        // return;
+        form.submit();
+    }
+
+    async function setBorrowerInfoOnBackend(name, contact, phone){
+
+        var name    = name.trim();
+        var contact = contact.trim();
+        var phone   = phone.trim();
+
+        try{
+            const response = await fetch('/set-borrower', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name, contact, phone }),
+                credentials: 'same-origin'
+            });
+
+            if (!response.ok){
+                throw new Error("Failed setting borrower info");
+            }
+
+            const data = await response;
+            console.log("set-borrower response: ", data);
+
+            return data;
+
+        }
+        catch (error){
+            console.error("Error on setting session: ", error);
+            throw error;
+        }
+    
+
+    }
+
+    // This function is duplicated on the item detail modals js
+    function loadBorrowerInfo(form, info){
+
+        // Try in case info is not the righ type
+        try{
+            form.elements['borrower_name'].value    = info.borrower_name
+            form.elements['borrower_email'].value = info.borrower_email
+            form.elements['borrower_phone'].value   = info.borrower_phone
+        }
+        catch (error){
+            console.log(error);
+        }
+    }
+
+    function loadBookedDatesInfo(form, booked_dates){
+        try{
+            form.elements["booked_dates"].value = booked_dates;
+        }
+        catch (error){
+            console.log(error);
+        }
     }
 
     document.addEventListener('DOMContentLoaded', (event) => {
         // Get the form element
-        const form = document.getElementById('booking_form');
+        console.log("here1");
+        const form = document.getElementById('cart_form');
 
         // Intercept the form submission
         form.addEventListener('submit', function(event) {
-            
-            event.preventDefault(); // Prevent the form from submitting
 
-            updateJSON();
+            event.preventDefault(); // Prevent the form from submitting       
 
-            // Trigger the actual form submission
-            form.submit();
-            
+            var info = JSON.parse({{borrower_info |tojson|safe}});
+            const cart_form = document.getElementById('booking_form');
+            loadBorrowerInfo(cart_form, info[0])
+
+            // TODO: This maybe does not need to be sent to the front end and then back to the back
+            const booked_dates = JSON.parse('{{ booked_dates|tojson }}'|| '[]');
+            loadBookedDatesInfo(cart_form, booked_dates);
+                
+            // show modal that modal saves info 
+            $('#bookingModal').modal('show');
+            return;
+
+            // console.log("here");
+            // updateJSON(form);
+
+            // // Trigger the actual form submission
+            // form.submit();
+
         });
     });
+
 </script>
+
+</body>

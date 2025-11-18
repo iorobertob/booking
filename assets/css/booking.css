@@ -198,3 +198,9 @@ a:hover {
   overflow-y: auto;
   touch-action: pan-y;
 }
+
+#bookingTable {
+    width: 100% !important;
+    overflow-x: auto;
+    display: block;
+}

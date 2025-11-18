@@ -1,9 +1,19 @@
 # Booking System
 ## IMMEDIATE TODOs before current release
+* not loading borrower info in calendar 
+* delete "cart_bulk"?
+* remove /book_bulk, but re-assign the cart functions
 * when typing data into the modal contact details there are errors in the console, what are those? = icloud passwords cannot deal with dynamicly created modals. 
 * delete book_item_modal.html and book_item_modal_add_to_cart.html
 * table overflows, does not scale well. it is not reactive when mid size window. 
 * the return date flatpickr is failing in bulk book, not updating after selection of borrow date
+* on the cart page why is it showing the modal even though there should be borrower info in the session.
+* add autofill with borrower info from the session, save in a cookie also
+* booking email is now only showing the first email of a bulk booking
+* delete book_bulk_modal.html and book_bulk.html
+* from home, error when booking directly, fill email without .com and email and phone seem to be swapped. 
+* UnboundLocalError: cannot access local variable 'all_booking_dates' where it is not associated with a value -> from booking directly from home
+
 
 
 
@@ -11,6 +21,7 @@
 * add "add to cart" on home page
 * cart interface for phone. 
 * empty booking bug
+* Delete button on home page is dangerous, move elsewhere or make a safety check
 * make an admin page for all the bookings / lent instances
 * cross to close alerts on modals.
 * Ask for email AND phone from borrowers
@@ -44,6 +55,10 @@
 * Tidy up emailing process once the bcc bug is fixed on mailersend
 * add a back button in the modal for booking that comes from home page.	
 * network on LMTA_guest
+* on bookings db table we have "borrower_email" but in some code we have "borrower_email". rewrite
+* DRY up the code, specially with the re-use of js scripts and functions between abstracted files and html templates
+* Find out if it is really necessary to send the booked dates back and forth or is it ok to handle all of that in the session. 
+* Look for DATATABLES ALTERNATIVE
 
 
 
@@ -98,7 +113,7 @@ booking.service
 - Added Bulk booking
 
 ### v2.1 - 20251111 
-- On "add to cart" button, pre-populate borrow date with today's day
+- On "add to cart" button, pre-populate borrow date with today day
 - block on the calendar interface all days before today and those that are booked already
 - add to cart also when selecting from the map
 - "book" on item detail now shows a modal just like add to cart and clicking on the calendar
