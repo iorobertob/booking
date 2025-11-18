@@ -59,6 +59,7 @@
 * DRY up the code, specially with the re-use of js scripts and functions between abstracted files and html templates
 * Find out if it is really necessary to send the booked dates back and forth or is it ok to handle all of that in the session. 
 * Look for DATATABLES ALTERNATIVE
+* Why is create_admin_user() where it is in the __main__ of main.py?
 
 
 
