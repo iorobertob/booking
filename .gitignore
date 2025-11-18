@@ -1,14 +1,11 @@
 
 vars
-vars/*
 
-venv/*
-vemv
+venv
 
 __pycache__
 
 .DS_Store
 
-migrations/
-
 mails_sent_log.txt
+mails_sent_log.txt.1
