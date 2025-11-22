@@ -493,6 +493,7 @@ def book():
         session.pop("microsoft_user", None)
         session.pop("flow", None)
         session.pop("borrower_info", None)
+        session.pop("user_email", None)
         # Don't use session.clear()
 
         session.modified = True  #  force session to update in some Flask versions
@@ -611,6 +612,7 @@ def bookings_list():
         session.pop("microsoft_user", None)
         session.pop("flow", None)
         session.pop("borrower_info", None)
+        session.pop("user_email", None)
         # Don't use session.clear()
 
         session.modified = True  #  force session to update in some Flask versions

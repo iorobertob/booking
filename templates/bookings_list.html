@@ -76,44 +76,47 @@ src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}">
 </script>
 
 <script>
-$(document).ready(function() {
 
-    $('#bookingTable').dataTable({
-            responsive:true,
-            select: {
-                style: 'os',
-                selector: 'td:first-child'
-            },
-            pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
-            language: {
-                paginate: {
-                    previous: "&lt;",
-                    next: "&gt;"
+    setBorrowerUrl("{{url_for('set_borrower')}}");
+    
+    $(document).ready(function() {
+
+        $('#bookingTable').dataTable({
+                responsive:true,
+                select: {
+                    style: 'os',
+                    selector: 'td:first-child'
                 },
-                emptyTable: "No bookings for this item."
-            }
-        });
+                pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
+                language: {
+                    paginate: {
+                        previous: "&lt;",
+                        next: "&gt;"
+                    },
+                    emptyTable: "No bookings for this item."
+                }
+            });
 
-    // Define this FIRST
-    const isMobile = window.innerWidth < 768;
+        // Define this FIRST
+        const isMobile = window.innerWidth < 768;
 
 
-});
+    });
 
-/**
- * Shows the denaial modal
- * 
- * @param {int} id - the id of the booking instance to deny
- */
-function showDenyModal(id){
+    /**
+     * Shows the denaial modal
+     * 
+     * @param {int} id - the id of the booking instance to deny
+     */
+    function showDenyModal(id){
 
-    const baseUrl = "{{ url_for('return_item', booking_id=0) }}"; // placeholder with a dummy ID
-    const realUrl = baseUrl.replace(/0$/, id);  // replace trailing 0
+        const baseUrl = "{{ url_for('return_item', booking_id=0) }}"; // placeholder with a dummy ID
+        const realUrl = baseUrl.replace(/0$/, id);  // replace trailing 0
 
-    document.querySelector('#deny_form').action = realUrl;
+        document.querySelector('#deny_form').action = realUrl;
 
-    $('#denyModal').modal('show');
-}
+        $('#denyModal').modal('show');
+    }
 </script>
 
     

@@ -138,6 +138,8 @@ data-action_book   = "{{ url_for('book') }}"></script>
                 loadBorrowerInfo(booking_form, info[0]);
             }
 
+            setBorrowerUrl("{{url_for('set_borrower')}}");
+            
             updateJSON(form, result.items);
             
             updateBookedDates(form, result.booked_dates);
