@@ -1,21 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html lang="en">
 <head>
-<!--[if gte mso 9]>
-    		<xml>
-    			<o:OfficeDocumentsettings>
-    			<o:AllowPNG/>
-    			<o:PixelsPerInch>96</o:PixelsPerInch>
-    			</o:OfficeDocumentsettings>
-    		</xml>
-    	<![endif]-->
-<!--[if gt mso 15]>
-     <style type="text/css" media="all">
-     /* Outlook 2016 Height Fix */
-     table, tr, td {border-collapse: collapse;}
-     tr { font-size:0px; line-height:0px; border-collapse: collapse; }
-     </style>
-     <![endif]-->
+
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -208,7 +194,11 @@ body, table, td, p, a, li, blockquote {
 								<table cellpadding="0" cellspacing="0" border="0" align="center" role="presentation">
 								<tr>
 									<td align="center">
-										<img src="https://misc.lmta.lt/booking/assets/images/misc_logo_alpha.png" alt="Logo" width="220" height="auto" class="logo">
+										<a href="https://misc.lmta.lt/booking">
+    										<div style="height:100%;width:100%">
+												<img src="https://misc.lmta.lt/booking/assets/images/misc_logo_alpha.png" alt="Logo" width="220" height="auto" class="logo">
+											</div>
+										</a>
 									</td>
 								</tr>
 								</table>
@@ -255,17 +245,17 @@ body, table, td, p, a, li, blockquote {
 		<tbody>
 		<tr>
 			<td align="center" style="color:#45535C;padding:20px 40px 0 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:800;font-size:34px;-webkit-font-smoothing:antialiased;line-height:1.2;" class="table-container mobile-title">
-				 Return reminder 
+				 Booking Denied
 			</td>
 		</tr>
 		<tr>
 			<td align="center" style="color:#45535C;padding:20px 40px 0 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:800;font-size:18px;-webkit-font-smoothing:antialiased;line-height:1.2;" class="table-container mobile-title">
-				 Here’s what you borrowed
+				 
 			</td>
 		</tr>
 		<tr>
 			<td align="center" style="color:#5a5a5a;padding:20px 40px 0 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:normal;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;" class="table-container">
-				 This is a list of items you have borrowed. These items are due to be returned on {{return_date}}.
+				 This booking has ben denied. Note: {{note}}.
 			</td>
 		</tr>
 		</tbody>
@@ -297,17 +287,18 @@ body, table, td, p, a, li, blockquote {
 			</table>
 			<table cellpadding="0" cellspacing="0" border="0" align="center" width="640" style="width: 640px; min-width: 640px;" role="presentation" bgcolor="#FFFFFF">
 			<tbody>
-			{% for item in items %}
+			{% for booking in bookings %}
 			<tr>
 				<td bgcolor="#FFF" width="40" align="left" style="color:#5a5a5a;padding:10px 0 10px 0;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
 				</td>
 				<td bgcolor="#FFFFFF" align="left" style="color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:normal;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
-					 {{item.name}}
+					 {{booking.item_name}}
 				</td>
 				<td bgcolor="#FFFFFF" align="right" style="color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
-					 
+					{{booking.borrow_date.strftime('%Y-%m-%d')}} until {{booking.return_date.strftime('%Y-%m-%d')}} 
 				</td>
 				<td bgcolor="#FFF" width="40" align="left" style="color:#5a5a5a;padding:10px 0 10px 0;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
+
 				</td>
 			</tr>
 			{% endfor %}
@@ -321,7 +312,7 @@ body, table, td, p, a, li, blockquote {
 				<td bgcolor="#FFFFFF" align="left" style="border-top:2px solid #CCCCCC;border-bottom:2px solid #CCCCCC;color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;" class="table-container">
 				</td>
 				<td bgcolor="#FFFFFF" align="right" style="border-top:2px solid #CCCCCC;border-bottom:2px solid #CCCCCC;color:#5a5a5a;padding:10px 40px 10px 40px;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:16px;-webkit-font-smoothing:antialiased;line-height:1.4;" class="table-container">
-					  {{return_date}}
+					 
 				</td>
 				<td bgcolor="#FFF" width="40" align="left" style="color:#5a5a5a;padding:10px 0 10px 0;font-family: 'Lato', Arial, Helvetica, sans-serif;font-weight:bold;font-size:14px;-webkit-font-smoothing:antialiased;line-height:1.4;">
 				</td>

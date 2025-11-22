@@ -1,229 +1,162 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MISC Booking</title>
+{% extends 'base.html' %}
 
-    <!-- Include DataTables CSS and jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+{% block content %}
 
-    <!-- BOOTSTRAP -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+<a class="navbar-brand" href="{{ url_for('home') }}">
+    <img class="image-brand" src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 100px;"/>
+    
+</a>
+<a class="navbar-brand" href="{{ url_for('home') }}">
+    <h1>MISC's Equipment</h1>
+</a>
 
-    <!-- DATATABLES -->
-    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.css" rel="stylesheet">
 
-    <script src="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.js"></script> 
+<div class="mb-3 d-flex flex-column flex-md-row justify-content-center justify-content-md-end align-items-center gap-2 px-3">
+    {% if current_user.is_authenticated and current_user.is_admin %}
+    <a href="{{ url_for('add_item') }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Add Item</a>
+    <a href="{{ url_for('edit_item', item_id='1') }}" onclick="deleteSelectedItems('delete')" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Delete Selected</a>
+    {% endif %}
+    <a href="javascript:void(0);" onclick="bookSelectedItems('book', null)" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Book Selected</a>
+</div>
+<hr>
+<div class ="table-responsive">
+    <table id="bookingTable" class="table table-striped table-bordered" style="width:100%">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Name</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Borrower</th>
+                <th>Borrower Email</th>
+                <th>Borrow Date</th>
+                <th>Return Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+                <tr>
+                    <td><input class="form-check-input item-checkbox" type="checkbox" value="{{item.id}}" id="checkbox_{{item.id}}"></td>
+                    <td class="clickable-cell">
+                      <a href="{{url_for('item_details',item_id=item.id)}}" style="display: block; width: 100%; height: 100%;">
+                        {{ item.name }}
+                      </a>
+                    </td>
+                    <td>{{ item.location }}</td>
+                    <td>{{ availability[loop.index-1] }}</td>
+                    <td>{{ bookings[loop.index-1].borrower_name }}</td>
+                    <td>{{ bookings[loop.index-1].borrower_email }}</td>
+                    <td>{{ bookings[loop.index-1].borrow_date.strftime('%Y-%m-%d') if bookings[loop.index-1].borrow_date else '' }}</td>
+                    <td>{{ bookings[loop.index-1].return_date.strftime('%Y-%m-%d') if bookings[loop.index-1].return_date else '' }}</td>
+                    <td> 
+                        <a href="javascript:void(0);" onclick="bookSelectedItems('book', {{item.id}})" >Book</a>
+                    {% if current_user.is_admin %}
+                        | <a href="{{ url_for('delete_item', item_id=item.id) }}">Delete</a>
+                        | <a href="{{ url_for('edit_item', item_id=item.id) }}">Edit</a>
+                    {% endif %}
+                </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
-    <!-- FLATPICKR -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+{% from 'macros.html' import book_modal%}
 
-    <!-- CUSTOM CSS -->
-    <link href="{{ url_for('custom_static', filename='css/booking.css') }}" rel="stylesheet">
+{{ book_modal('1', 'Book Item', False, item, 'bookingModal', 'booking_form') }}
 
-</head>
+<!-- CUSTOM MODAL JS -->
+<script 
+id  = "item_detail_modals_script" 
+src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}" 
+data-action_cart   = "{{ url_for('book_cart') }}"
+data-action_book   = "{{ url_for('book') }}"></script>
 
-<body>
-    {% include 'nav.html' %}
-    <div class="container">
+<script>
 
-        <a class="navbar-brand" href="{{ url_for('home') }}">
-            <img class="image-brand" src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 100px;"/>
-            
-        </a>
-        <a class="navbar-brand" href="{{ url_for('home') }}">
-            <h1>MISC's Equipment</h1>     
-        </a>
-
-        {% for category, message in get_flashed_messages(with_categories=True) %}
-            {% if message %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endif %}
-        {% endfor %}
-
-            <div class="mb-3 d-flex justify-content-end">
-                {% if current_user.is_authenticated and current_user.is_admin %}
-                <a href="{{ url_for('add_item') }}"class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Add Item</a>
-                <a href="{{ url_for('edit_item', item_id='1') }}" onclick="bookSelectedItems('delete')" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Delete Selected</a>
-                {% endif %}
-                <a href="javascript:void(0);" onclick="bookSelectedItems('book', null)" class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">Book Selected</a>
-            </div>
-            <hr>
-            <table id="bookingTable">
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>Name</th>
-                        <th>Location</th>
-                        <th>Status</th>
-                        <th>Borrower</th>
-                        <th>Borrower Email</th>
-                        <th>Borrow Date</th>
-                        <th>Return Date</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items %}
-                        <tr>
-                            <td><input class="form-check-input item-checkbox" type="checkbox" value="{{item.id}}" id="checkbox_{{item.id}}"></td>
-                            <td><a href="{{url_for('item_details',item_id=item.id)}}"> {{ item.name }}</a></td>
-                            <td>{{ item.location }}</td>
-                            <td>{{ availability[loop.index-1] }}</td>
-                            <td>{{ bookings[loop.index-1].borrower_name }}</td>
-                            <td>{{ bookings[loop.index-1].borrower_email }}</td>
-                            <td>{{ bookings[loop.index-1].borrow_date.strftime('%Y-%m-%d') if bookings[loop.index-1].borrow_date else '' }}</td>
-                            <td>{{ bookings[loop.index-1].return_date.strftime('%Y-%m-%d') if bookings[loop.index-1].return_date else '' }}</td>
-                            <td>
-                                <!-- <a href="{{ url_for('book_item', item_id=item.id) }}">Book</a> -->
-                                <a href="javascript:void(0);" onclick="bookSelectedItems('book', {{item.id}})" >Book</a>
-                            {% if current_user.is_admin %}
-                                | <a href="{{ url_for('delete_item', item_id=item.id) }}">Delete</a>
-                                | <a href="{{ url_for('edit_item', item_id=item.id) }}">Edit</a>
-                            {% endif %}
-                        </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-    </div>
-
-    {% from 'macros.html' import book_modal %}
-
-    {{ book_modal('1', 'Book Item', False, item, 'bookingModal', 'booking_form') }}
-  
-    <script>
- 
-        loadModalScript();
-
-        $(document).ready(function() {
-            $('#bookingTable').dataTable({
-                responsive:true,
-                select: {
-                    style: 'os',
-                    selector: 'td:first-child'
+    $(document).ready(function() {
+        $('#bookingTable').dataTable({
+            responsive:true,
+            select: {
+                style: 'os',
+                selector: 'td:first-child'
+            },
+            pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
+            language: {
+                paginate: {
+                    previous: "&lt;",
+                    next: "&gt;"
                 }
-            });
+            }
         });
+    });
 
-        async function bookSelectedItems(action, item_id) {
-            // Collect all checked checkboxes.
-            let checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
-            let selectedIds;
-            // Extract the value (item ID) from each checked checkbox.
-            if (item_id == null ){
-                selectedIds = Array.from(checkedBoxes).map(box => box.value);
+    async function bookSelectedItems(action, item_id) {
+        
+        // The only form on this page
+        let form = document.getElementById("booking_form");
 
-                if (selectedIds.length === 0) {
-                    // Redirect to the same page with a query parameter to trigger flash
-                    window.location.href = "/?flash=select_items";
-                    return;
-                }
+        // Collect all checked checkboxes.
+        let checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
+        
+        let selectedIds;
+
+        // Get the item IDs from each checked item.
+        if (item_id == null ){
+            selectedIds = Array.from(checkedBoxes).map(box => box.value);
+
+            if (selectedIds.length === 0) {
+                // Redirect to the same page with a query parameter to trigger flash
+                window.location.href = "/?flash=select_items";
+                return;
             }
-            else{
-                selectedIds = [item_id];
+        }
+        else{
+            selectedIds = [item_id];
+        }
+        
+        // Convert the array of IDs into a comma-separated string to pass as a query parameter.
+        let idsQueryParam = selectedIds.join('&items=');
+
+        const url = "{{ url_for('bulk_details') }}?&items=" + idsQueryParam + "&action=book";
+        
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error(`Response status: ${response.status}`);
             }
+
+            // Wait for the response
+            const result = await response.json();
+
+            // Load info from the server
+            var info            = JSON.parse({{borrower_info |tojson|safe}});
+            const booking_form  = document.getElementById('booking_form');
+            var info = JSON.parse({{ borrower_info | tojson | safe }} || '[]');
+            if (info.length > 0) {
+                loadBorrowerInfo(booking_form, info[0]);
+            }
+
+            updateJSON(form, result.items);
             
-            // Convert the array of IDs into a comma-separated string to pass as a query parameter.
-            let idsQueryParam = selectedIds.join('&items=');
+            updateBookedDates(form, result.booked_dates);
 
-            if (action == 'book'){
-
-                const url = "{{ url_for('bulk_details') }}?&items=" + idsQueryParam + "&action=book";
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                      throw new Error(`Response status: ${response.status}`);
-                    }
-
-                    const result = await response.json();
-
-                    $('#bookingModal').modal('show');
-
-                    var form = document.getElementById("booking_form");
-
-                    updateJSON(form, result.items);
-                    
-                    updateBookedDates(form, result.booked_dates);
-
-                    // loadModalScript();
-                    initDatePickers();
-
-                } catch (error) {
-                    console.error(error.message);
-                }
-
-            }
-            else{
-                // this seems dangerous here...
-                window.location.href = "{{ url_for('book') }}?&items=" + idsQueryParam + "&action=delete";
-            }   
-        }
-
-        function updateBookedDates(form, booked_dates){
-            form.elements['booked_dates'].value = booked_dates;
-        }
-
-        function updateJSON(form, items_json){
-            var borrowing_date  = form.elements['borrow_date'].value;
-            var returning_date  = form.elements['return_date'].value;
+            initDatePickers();
             
-            // items_json is null when items_for_cart is given from flask
-            if (items_json == null ){
-                items = JSON.parse(data.item_for_cart || '{}');
-            }
-            else{
-                items = items_json;
-            }
-            
-            const   itemsArray = Array.isArray(items) ? items : [items];
-            var     itemsJSON = [];
+            $('#bookingModal').modal('show');
 
-            itemsArray.forEach(item => {
-                itemsJSON.push({id         : item.id,
-                                name       : item.name,
-                                location   : item.location,
-                                borrow_date: borrowing_date,
-                                return_date: returning_date});
-            });
+        } catch (error) {
+            console.error(error.message);
+        } 
+    }
 
-            form.elements['itemsJSON'].value = JSON.stringify(itemsJSON);
+    function deleteSelectedItems(action){
+        // TODO:this seems dangerous here...
+        window.location.href = "{{ url_for('book') }}?&items=" + idsQueryParam + "&action=delete";
+    }
 
-        }
-
-        function loadModalScript() {
-            const script = document.createElement('script');
-            script.src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}";
-            script.id  = "item_detail_modals_script";
-
-            // Set data attributes
-            script.dataset.action_cart    = "{{ url_for('book_cart') }}";
-            script.dataset.action_book    = "{{ url_for('book') }}";
-
-            // Optional: handle onload event
-            script.onload = () => {
-                // console.log("item_detail_modals.js loaded!");
-                // Now it is safe to call functions defined in this file
-                var info            = JSON.parse({{borrower_info |tojson|safe}});
-                const booking_form  = document.getElementById('booking_form');
-                loadBorrowerInfo(booking_form, info[0])
-            };
-
-            document.body.appendChild(script);  // inject it into the DOM
-        }
-
-    </script>
-    <script>
 
 </script>
 
-</body>
-</html>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="header">
+    <a href="{{ url_for('home')}}"><img src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}"  alt="MISC Logo"></a>
+    <h1>All Bookings</h1>
+</div>
+
+<hr>
+
+<h3>Future Bookings:</h3>
+
+<table name="bookingTable" id="bookingTable">
+    <thead>
+        <tr>
+            <th>Item</th>
+            <th>Borrower</th>
+            <th>Borrow Date</th>
+            <th>Return Date</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Status</th>
+            {% if current_user.is_admin %}
+            <th>Actions</th>
+            {% endif %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for booking in bookings %}
+            <tr>
+                <td class="clickable-cell">
+                  <a href="{{url_for('item_details',item_id=booking.item_id)}}" style="display: block; width: 100%; height: 100%;">
+                    {{ booking.item_name }}
+                  </a>
+                </td>
+                <td>{{ booking.borrower_name }}</td>
+                <td>{{ booking.borrow_date.strftime('%Y-%m-%d') if booking.borrow_date else '' }}</td>
+                <td>{{ booking.return_date.strftime('%Y-%m-%d') if booking.return_date else '' }}</td>
+                <td>
+                    {{ booking.borrower_email }} 
+                    <br>
+                    {{ booking.user_email}}
+                </td>
+                <td>{{ booking.borrower_phone }}</td>
+                <td>{{ booking.status }}</td>
+                {% if current_user.is_admin %}
+                    <td>
+                    {% if booking.status == 'booked' and current_user.is_admin %}
+                        | <a href="{{ url_for('lend_item', booking_id=booking.id) }}">Mark as Lent</a>
+                        | <a href="javascript:void(0);" onclick="showDenyModal({{booking.id}})" >Deny  Booking</a>
+                    {% elif booking.status == 'booked' and current_user.is_authenticated == False %}
+                         <p>Booked</p>
+                    {% elif booking.status == 'lent' and current_user.is_admin %}
+                        | <a href="{{ url_for('return_item', booking_id=booking.id) }}">Mark as Returned</a>
+                    {% endif %}
+                    </td>
+                {% endif %}
+            
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+            
+
+
+{% from 'macros.html' import deny_modal %}
+
+{{ deny_modal('1', 'Deny Booking','denyModal', 'deny_form') }}
+
+
+<!-- CUSTOM MODAL JS -->
+<script 
+id  = "item_detail_modals_script" 
+src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}">
+</script>
+
+<script>
+$(document).ready(function() {
+
+    $('#bookingTable').dataTable({
+            responsive:true,
+            select: {
+                style: 'os',
+                selector: 'td:first-child'
+            },
+            pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
+            language: {
+                paginate: {
+                    previous: "&lt;",
+                    next: "&gt;"
+                },
+                emptyTable: "No bookings for this item."
+            }
+        });
+
+    // Define this FIRST
+    const isMobile = window.innerWidth < 768;
+
+
+});
+
+/**
+ * Shows the denaial modal
+ * 
+ * @param {int} id - the id of the booking instance to deny
+ */
+function showDenyModal(id){
+
+    const baseUrl = "{{ url_for('return_item', booking_id=0) }}"; // placeholder with a dummy ID
+    const realUrl = baseUrl.replace(/0$/, id);  // replace trailing 0
+
+    document.querySelector('#deny_form').action = realUrl;
+
+    $('#denyModal').modal('show');
+}
+</script>
+
+    
+{% endblock %}

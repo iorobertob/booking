@@ -1,60 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MISC Booking</title>
-     
-    <!-- Include DataTables CSS and jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+{% extends 'base.html' %}
 
-    <!-- BOOTSTRAP 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% block content %}
 
-
-    <!-- DATATABLES -->
-    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.css" rel="stylesheet">
-
-    <script src="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.js"></script> 
-
-    <!-- CUSTOM CSS -->
-    <link href="{{ url_for('custom_static', filename='css/booking.css') }}" rel="stylesheet">
-
-    <!-- CALENDAR -->
-    <link href='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.css' rel='stylesheet' />
-    <script src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js'></script>
-
-    <script defer src='https://static.cloudflareinsights.com/beacon.min.js' ></script>
-
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar/index.global.js'></script>
-
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
-
-</head>
-<body>
-    {% include 'nav.html' %}
-    <div class="container">
-        <!-- <div class="header">
-            <a href="{{ url_for('home')}}"><img src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}"  alt="MISC Logo"></a>
-            <h1>Music Innovation Studies Centre's Booking System</h1>
-        </div> -->
         <h1>{{item.name}}</h1>
 
         <hr>
-        {% for category, message in get_flashed_messages(with_categories=True) %}
-            {% if message %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endif %}
-        {% endfor %}
-
-
+        
 
         <div class="mb-3 d-flex justify-content-end">
             {% if current_user.is_authenticated and current_user.is_admin %}
@@ -94,7 +45,7 @@
                                 <td>
                                 {% if booking.status == 'booked' and current_user.is_admin %}
                                     | <a href="{{ url_for('lend_item', booking_id=booking.id) }}">Mark as Lent</a>
-                                    | <a href="{{ url_for('return_item', booking_id=booking.id) }}">Deny Booking</a>
+                                    | <a href="javascript:void(0);" onclick="showDenyModal({{booking.id}})" >Deny  Booking</a>
                                 {% elif booking.status == 'booked' and current_user.is_authenticated == False %}
                                      <p>Booked</p>
                                 {% elif booking.status == 'lent' and current_user.is_admin %}
@@ -108,31 +59,39 @@
                 </tbody>
             </table>
 
-            <ul>
-                    <div id='calendar'></div> <!--  FullCalendar  -->
-            </ul>
+            <!--  FullCalendar  -->
+            <div class="my-4">
+              <div id="calendar"></div>
+            </div>
             
     </div>
 
-    {% from 'macros.html' import book_modal %}
+    {% from 'macros.html' import book_modal, deny_modal %}
 
     {{ book_modal('1', 'Book Item', False, item, 'bookingModal', 'booking_form') }}
 
 
     {{ book_modal('2', 'Add to Cart', True, item, 'cartModal', 'cart_form') }}
 
-
+    {{ deny_modal('1', 'Deny Booking','denyModal', 'deny_form') }}
 
     <!-- CUSTOM MODAL JS -->
     <script 
     id  = "item_detail_modals_script" 
     src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}" 
-    data-disabled_dates= "{{ booked_dates|tojson }}"
+    data-disabled_dates= "{{ booked_dates }}"
     data-item_for_cart = '{{ item_for_cart|tojson }}'
     data-action_cart   = "{{ url_for('book_cart',item_id=item.id) }}"
-    data-action_book   = "{{ url_for('book_item'   ,item_id=item.id) }}"></script>
+    data-action_book   = "{{ url_for('book'     ,item_id=item.id) }}">
+    </script>
 
     <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (document.getElementById('calendar')) {
+        setupCalendar({{ booking_dates | tojson | safe }});
+      }
+    });
+
     $(document).ready(function() {
 
         initDatePickers();
@@ -143,7 +102,12 @@
                     style: 'os',
                     selector: 'td:first-child'
                 },
+                pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
                 language: {
+                    paginate: {
+                        previous: "&lt;",
+                        next: "&gt;"
+                    },
                     emptyTable: "No bookings for this item."
                 }
             });
@@ -158,176 +122,29 @@
         }
 
         // Load info from the server
-        var info  = JSON.parse({{borrower_info |tojson|safe}});
+        var info            = JSON.parse({{borrower_info |tojson|safe}});
         const booking_form  = document.getElementById('booking_form');
         loadBorrowerInfo(booking_form, info[0])
 
-        setupCalendar();
+        // setupCalendar({{ booking_dates | tojson | safe }});
 
     });
 
-    // TODO: on hover over the rows highlight the calendar dates, and vice versa
-    function setupCalendar(){
-        // Define this FIRST
-        const isMobile = window.innerWidth < 768;
+    /**
+     * Shows the denaial modal
+     * 
+     * @param {int} id - the id of the booking instance to deny
+     */
+    function showDenyModal(id){
 
-        // Convert booked dates to an array of event objects for FullCalendar
-        var bookingDates  = {{ booking_dates | tojson | safe }};
+        const baseUrl = "{{ url_for('return_item', booking_id=0) }}"; // placeholder with a dummy ID
+        const realUrl = baseUrl.replace(/0$/, id);  // replace trailing 0
 
-        var events = bookingDates.map(function(bookingDates) {
-            var rand = Math.floor(Math.random() * 10);
-            var colorQ = "rgb(" + (215 - rand * 3) + "," + (185 - rand * 5) + "," + (185 - rand * 10) + " )"; 
+        document.querySelector('#deny_form').action = realUrl;
 
-            return {
-                title: bookingDates.borrower_name,
-                start: new Date(new Date(bookingDates.borrow_date).getTime()),
-                // end:bookingDat.return_date,
-                end: new Date(new Date(bookingDates.return_date).getTime() + 86400000), // Add one day to include the return date
-                display: "background",
-                allDay:true,
-                // color: "#2340af" // Grey out color
-                color: colorQ,
-            };
-        });
-
-        const calendarEl = document.getElementById('calendar')
-        const calendar   = new FullCalendar.Calendar(calendarEl,{
-
-            initialView: 'dayGridMonth',
-            selectable: true,
-            selectMirror: true,
-            longPressDelay: 200, // in ms, how long you must press on touch to start selection
-            selectLongPressDelay: 200, // iOS-friendly version
-            selectMinDistance: 2, // how far you must drag before selection starts
-
-            height: 'auto',
-            expandRows: true,
-            contentHeight: 'auto',
-            themeSystem: 'bootstrap5', // optional, improves scaling
-            aspectRatio: isMobile ? 0.85 : 1.35,
-
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: isMobile ? '' : 'dayGridMonth,timeGridWeek',
-            },
-
-            // Block all days before today
-            validRange: {
-                start: new Date() // or moment().format('YYYY-MM-DD')
-            },
-
-            events: events,
-            selectAllow: function(selectInfo) {
-
-                const start = selectInfo.start;
-                const end   = selectInfo.end;
-
-                // Check if any event overlaps with the selected date range
-                const isOverlap = calendar.getEvents().some(function(event) {
-                    return (start < event.endStr && end > event.startStr);
-                });
-
-                // Block past days
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                if (start < today) return false;
-
-
-                return !isOverlap; // If there is an overlap, disallow selection
-            },
-            select: function (info) {
-                        // Format the date as needed, here using YYYY-MM-DD format
-                        const selectedDate = moment(info.startStr).format('YYYY-MM-DD');
-
-                        // Update the return date picker's minDate
-                        updateReturnDatePickerMinDate(selectedDate);
-
-                        const startDate = info.startStr;
-                        const endDate = moment(info.end).subtract(1, 'days').format('YYYY-MM-DD');
-
-                        // Format start & end dates as YYYY-MM-DD
-                        const borrowDate = moment(info.startStr).format('YYYY-MM-DD');
-                        const returnDate = moment(info.end).subtract(1, 'days').format('YYYY-MM-DD');
-
-                        // Update all borrow date fields 
-                        document.querySelectorAll('.datepicker_borrow').forEach(input => {
-                            // Set raw input value
-                            input.value = borrowDate;
-
-                            // Update Flatpickr instance if present
-                            if (input._flatpickr) {
-                                input._flatpickr.setDate(borrowDate, true);
-                            }
-                        });
-
-                        // Update all return date fields 
-                        document.querySelectorAll('.datepicker').forEach(input => {
-                            input.value = returnDate;
-
-                            if (input._flatpickr) {
-                                input._flatpickr.setDate(returnDate, true);
-                            }
-                        });
-
-                        // Update minDate logic for all return pickers
-                        if (typeof updateReturnDatePickerMinDate === 'function') {
-                            updateReturnDatePickerMinDate(borrowDate);
-                        }
-
-
-                        console.log("Selected:", startDate, "to", endDate);
-                        $('#bookingModal').modal('show');
-                                            
-                        // Pre-populate the borrow_date field in the modal
-                        $('#borrow_date_1').val(selectedDate);
-                        
-                        // Show the modal
-                        $('#bookingModal').modal('show');
-            } ,          
-            // For single-tap (mobile and desktop clicks)
-            dateClick: function(info) {
-                // Format the clicked date as YYYY-MM-DD
-                const selectedDate = moment(info.dateStr).format('YYYY-MM-DD');
-
-                // Update all borrow date fields
-                document.querySelectorAll('.datepicker_borrow').forEach(input => {
-                    input.value = selectedDate;
-                    if (input._flatpickr) {
-                        input._flatpickr.setDate(selectedDate, true);
-                    }
-                });
-
-                // Update minDate logic for all return pickers
-                if (typeof updateReturnDatePickerMinDate === 'function') {
-                    updateReturnDatePickerMinDate(selectedDate);
-                }
-                $('#bookingModal').modal('show');
-            },
-
-        });
-        calendar.render()
-
-        let pressTimer;
-        let isSelecting = false;
-
-        calendarEl.addEventListener('touchstart', function(e) {
-          pressTimer = setTimeout(() => {
-            isSelecting = true;
-            calendarEl.classList.add('fc-long-pressing');
-          }, 300);
-        });
-
-        calendarEl.addEventListener('touchend', function(e) {
-          clearTimeout(pressTimer);
-          if (isSelecting) {
-            isSelecting = false;
-            calendarEl.classList.remove('fc-long-pressing');
-          }
-        });
-
+        $('#denyModal').modal('show');
     }
     </script>
 
-</body>
-</html>
+
+{% endblock %}

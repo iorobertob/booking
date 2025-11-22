@@ -14,23 +14,27 @@
         </a>
 
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('cart') }}">Cart</a>
-                    </li>
+                        <a class="btn btn-outline-primary" href="{{ url_for('cart') }}">Cart</a>
+                    </li>&nbsp;
                 {% if current_user.is_authenticated %}
                     {% if current_user.is_admin %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('bookings_list') }}">Bookings</a>
-                        </li>
+                            <a class="btn btn-outline-primary" href="{{ url_for('bookings_list') }}">Bookings</a>
+                        </li>&nbsp;
                     {% endif %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
-                    </li>
+                        <a class="btn btn-outline-primary" href="{{ url_for('logout') }}">Logout</a>
+                    </li>&nbsp;
                 {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('login') }}">Login</a>
-                    </li>
+                        <a class="btn btn-outline-primary" href="{{ url_for('login') }}">Login</a>
+                    </li>&nbsp;
+                    <li class='nav-item'>
+                        <a class="btn btn-outline-primary" href="{{ url_for('login_microsoft') }}"><img src="https://img.icons8.com/color/24/000000/microsoft.png" alt="MS Logo" style="height: 20px;">Login with Office 365</a>
+                    </li>&nbsp;
                 {% endif %}
             </ul>
         </div>

@@ -23,7 +23,7 @@ def upgrade():
     sa.Column('item_id', sa.Integer(), nullable=False),
     sa.Column('item_name', sa.String(length=100), nullable=False),
     sa.Column('borrower_name', sa.String(length=100), nullable=False),
-    sa.Column('borrower_contact', sa.String(length=100), nullable=False),
+    sa.Column('borrower_email', sa.String(length=100), nullable=False),
     sa.Column('borrow_date', sa.DateTime(), nullable=False),
     sa.Column('return_date', sa.DateTime(), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=True),
@@ -33,7 +33,7 @@ def upgrade():
     with op.batch_alter_table('item', schema=None) as batch_op:
         batch_op.drop_column('borrower_name')
         batch_op.drop_column('borrow_date')
-        batch_op.drop_column('borrower_contact')
+        batch_op.drop_column('borrower_email')
         batch_op.drop_column('status')
         batch_op.drop_column('return_date')
 
@@ -45,7 +45,7 @@ def downgrade():
     with op.batch_alter_table('item', schema=None) as batch_op:
         batch_op.add_column(sa.Column('return_date', mysql.DATETIME(), nullable=True))
         batch_op.add_column(sa.Column('status', mysql.VARCHAR(length=20), nullable=True))
-        batch_op.add_column(sa.Column('borrower_contact', mysql.VARCHAR(length=100), nullable=True))
+        batch_op.add_column(sa.Column('borrower_email', mysql.VARCHAR(length=100), nullable=True))
         batch_op.add_column(sa.Column('borrow_date', mysql.DATETIME(), nullable=True))
         batch_op.add_column(sa.Column('borrower_name', mysql.VARCHAR(length=100), nullable=True))
 

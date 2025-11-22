@@ -1,90 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        form {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        label {
-            font-weight: bold;
-            display: block;
-            margin-top: 10px;
-        }
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #34495e;
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 20px;
-            width: 100%;
-        }
-        button:hover {
-            background-color: #2c3e50;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 4px;
-            background-color: #e74c3c;
-            color: white;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <form method="post" action="">
+{% extends 'base.html' %}
+
+{% block content %}
+
+    <form class="mx-auto" style="max-width: 400px;" method="post">
         <h1>Login</h1>
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <ul>
-                    {% for message in messages %}
-                        <li>{{ message }}</li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
+        
+          <a class="btn btn-primary booking" 
+             href="{{ url_for('login_microsoft') }}"
+             class="btn btn-primary booking" style="background-color: #34495e; border: none; margin:10px ;">
+            <img src="https://img.icons8.com/color/24/000000/microsoft.png" alt="MS Logo" style="height: 20px;">
+            Sign in with Office 365
+          </a>
+        
+        <hr>    
         <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required><br>
+        <input type="text" id="username" class="form-control mb-3" name="username" required><br>
         <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required><br>
-        <button type="submit">Login</button>
+        <input type="password" id="password" class="form-control mb-3" name="password" required><br>
+        <button type="submit"class="booking" >Login</button>
+
     </form>
-</body>
-</html>
+{% endblock %}

@@ -1,67 +1,37 @@
 # Booking System
-## IMMEDIATE TODOs before current release
-* not loading borrower info in calendar 
-* delete "cart_bulk"?
-* remove /book_bulk, but re-assign the cart functions
-* when typing data into the modal contact details there are errors in the console, what are those? = icloud passwords cannot deal with dynamicly created modals. 
-* delete book_item_modal.html and book_item_modal_add_to_cart.html
-* table overflows, does not scale well. it is not reactive when mid size window. 
-* the return date flatpickr is failing in bulk book, not updating after selection of borrow date
-* on the cart page why is it showing the modal even though there should be borrower info in the session.
-* add autofill with borrower info from the session, save in a cookie also
-* booking email is now only showing the first email of a bulk booking
-* delete book_bulk_modal.html and book_bulk.html
-* from home, error when booking directly, fill email without .com and email and phone seem to be swapped. 
-* UnboundLocalError: cannot access local variable 'all_booking_dates' where it is not associated with a value -> from booking directly from home
-
-
-
 
 ## TODO:
-* add "add to cart" on home page
-* cart interface for phone. 
-* empty booking bug
-* Delete button on home page is dangerous, move elsewhere or make a safety check
-* make an admin page for all the bookings / lent instances
-* cross to close alerts on modals.
-* Ask for email AND phone from borrowers
-* Improve add to cart functionality, does not need name and contact every time. only on checkout. 
-* on cart table add links to the name or id of the items. 
-* Take add_to_cart functionality out of item_details (why is it there) and
-* send email on aceptance or denial of bookings !!! important
-* write a comment on why booking was denied
-* specify if the status is clearly lent OR booked, not together
+* add the lmta email to the booking item, for if they change and falsify identity
+* for the pages that need admin privileges, now there is duplicate with decorator and logic inside the function. check that. 
+* Turn add item and other mini pages into modals
+* Add logic to refuse overlapping lending of booked items. 
+* Tidy up emailing process once the bcc bug is fixed on mailersend
+* Aggregate all booked items at once under the same booking model instance. In this case the booking instance should contain sub dicts for items with their own borrow dates. this must be backwards compatible. this shoul be for version 3.0
+* network on LMTA_guest ????
+* Find out if it is really necessary to send the booked dates back and forth or is it ok to handle all of that in the session. 
+* Look for DATATABLES ALTERNATIVE
+* Why is create_admin_user() where it is in the __main__ of main.py?
+* refactor, url for book_cart and for book are always the same, no need to pass them as data to the CUSTOM MODAL JS script
+* fix LOCALHOST logic so it can be set from __main__
+* when typing data into the modal contact details there are errors in the console, what are those? = icloud passwords cannot deal with dynamicly created modals. 
+* Delete button on home page is dangerous, move elsewhere or make a safety check (deleteSelectedItems)
 * keep on sending reminders to return item for a long as it is "lent" and include that if its returned please ask the admin to mark it so. 
-* make list of booked items separately. 
 * When adding items, the locations should be on a dropdown menu.
 * return to same page search/filter conditions when going back. 
 * Send only one aggregated reminder email, not one per borrowed item.
 * Decide whether or not to send remidner email to admins.?
-* Add cart - DONE
-* Add discard X button to flash messages
-* Bulk delete, by checking a box
-* Bulk deny booking, by checking a box
-* Grouping items and show qty available ?
+* Bulk delete, by checking a box?
+* Bulk deny booking, by checking a box.
+* Mark as lent or returned in bulk 
+* Grouping items and show qty available 
 * Categories
 * Booking rooms in the same website.
 * Connect to Google calendar
 * Note on return about state of item
 * Comments on items page
-* Some items are not bookable.
+* Some items whould be not bookable.
 * Add [random] colours to booking table to display on the fullcalendar
-* Add the possibility to mark as lent or returned in bulk somehow
-* Migrate to Django?
-* Add policy text. 
-* Tidy up emailing process once the bcc bug is fixed on mailersend
-* add a back button in the modal for booking that comes from home page.	
-* network on LMTA_guest
-* on bookings db table we have "borrower_email" but in some code we have "borrower_email". rewrite
-* DRY up the code, specially with the re-use of js scripts and functions between abstracted files and html templates
-* Find out if it is really necessary to send the booked dates back and forth or is it ok to handle all of that in the session. 
-* Look for DATATABLES ALTERNATIVE
-* Why is create_admin_user() where it is in the __main__ of main.py?
-
-
+* Check password created with MS Login
 
 
 ## DB migration
@@ -113,12 +83,20 @@ booking.service
 - Changes in layout
 - Added Bulk booking
 
-### v2.1 - 20251111 
-- On "add to cart" button, pre-populate borrow date with today day
-- block on the calendar interface all days before today and those that are booked already
-- add to cart also when selecting from the map
-- "book" on item detail now shows a modal just like add to cart and clicking on the calendar
+### v2.1 - 20251121 
+- Collect borrower's phone also.
+- On "add to cart" button, pre-populate borrow date with today day.
+- Block on the calendar interface all days before today and those that are booked already.
+- Add to cart also when selecting from the map.
+- Saving borrower info in session and other details for better ux.
+- New admin page for all the bookings / lent instances.
+- Send email with a note on denial of bookings.
+- Added about and terms of use pages. 
+- "book" on item detail now shows a modal just like add to cart and clicking on the calendar.
+- Refactor several variable names.
+- Implemment login using MS Office 365
 - Fixed bugs:
 -- catch when there are duplicate recipient emails in the list. 
--- fixed cart page overflows
+-- fixed some pages and table overflowing
 -- improved phone interface
+-- fixed empty booking

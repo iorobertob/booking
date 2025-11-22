@@ -1,78 +1,66 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MISC Booking</title>
-
-    <!-- Include DataTables CSS and jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-    <!-- BOOTSTRAP -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
-
-    <!-- DATATABLES -->
-    <link href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css" rel="stylesheet">
-    <link href="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.css" rel="stylesheet">
-
-    <script src="https://cdn.datatables.net/v/ju/dt-1.13.8/r-2.5.0/datatables.min.js"></script> 
-
-    <!-- CUSTOM CSS -->
-    <link href="{{ url_for('custom_static', filename='css/booking.css') }}" rel="stylesheet">
-
-</head>
-
-<body>
-    {% include 'nav.html' %}
+{% extends 'base.html' %}
 
 {% block content %}
-<div class="container">
-    {% include 'flashes.html' %}
-    <h2>Booking Cart</h2>
-    <table  id="cartTable" class="table">
-        <thead>
-            <tr>
-                <th scope="col">#</th>
-                <th scope="col">Name</th>
-                <th scope="col">Location</th>
-                <th scope="col">Borrow Date</th>
-                <th scope="col">Return Date</th>
-                <th scope="col">Remove</th>
-            </tr>
-        </thead>
-        <tbody>
-                {% for item in items %}
-                <tr>
-                  <th scope="row">{{ loop.index }}</th>
-                  <td>{{ item.name }}</td>
-                  <td>{{ item.location }}</td>
-                  <td>{{ item.borrow_date }}</td>
-                  <td>{{ item.return_date }}</td>
-                  <td><a href="{{ url_for('remove_from_cart', item_id=loop.index) }}" class="btn btn-danger btn-sm">Remove</a></td>
-                </tr>
-                {% endfor %}
-        </tbody>
-    </table>
-    <form action="{{ url_for('book') }}" method="post" id="cart_form">
-        <input type="hidden" id="itemsJSON" name="itemsJSON" value="">
-        <input type="hidden" id="from_cart" name="from_cart" value="True">
-        <input type="hidden" name="action"  id="formAction" value="book">
 
-        <button type="submit" class="btn btn-success">Book All</button>
-    </form>
-    <form action="{{ url_for('remove_from_cart', item_id='all') }}" method="post">
-        <button type="submit" class="btn btn-warning">Empty Cart</button>
-    </form>
-</div>
-{% endblock %}
+<h2>Booking Cart</h2>
+<table  id="cartTable" class="table">
+    <thead>
+        <tr>
+            <th scope="col">#</th>
+            <th scope="col">Name</th>
+            <th scope="col">Location</th>
+            <th scope="col">Borrow Date</th>
+            <th scope="col">Return Date</th>
+            <th scope="col">Remove</th>
+        </tr>
+    </thead>
+    <tbody>
+            {% for item in items %}
+            <tr>
+                <th scope="row">{{ loop.index }}</th>
+                <td class="clickable-cell">
+                  <a href="{{url_for('item_details',item_id=item.id)}}" style="display: block; width: 100%; height: 100%;">
+                    {{ item.name }}
+                  </a>
+                </td>
+                <td>{{ item.location }}</td>
+                <td>{{ item.borrow_date }}</td>
+                <td>{{ item.return_date }}</td>
+                <td><a href="{{ url_for('remove_from_cart', item_id=loop.index) }}" class="btn btn-danger btn-sm">Remove</a></td>
+            </tr>
+            {% endfor %}
+    </tbody>
+</table>
+<form action="{{ url_for('book') }}" method="post" id="cart_form">
+    <input type="hidden" id="itemsJSON" name="itemsJSON" value="">
+    <input type="hidden" id="from_cart" name="from_cart" value="True">
+    <input type="hidden" name="action"  id="formAction" value="book">
+
+    <button type="submit" class="btn btn-success">Book All</button>
+</form>
+<form action="{{ url_for('remove_from_cart', item_id='all') }}" method="post">
+    <button type="submit" class="btn btn-warning">Empty Cart</button>
+</form>
 
 
 {% from 'macros.html' import book_modal %}
 
 {{ book_modal ('3', 'Contact Info', False, item, 'bookingModal', 'booking_form') }}
 
+ <!-- CUSTOM MODAL JS -->
+    <script 
+    id  = "item_detail_modals_script" 
+    src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}" 
+    data-item_for_cart = '{{ items_for_cart|tojson }}'
+    data-action_cart   = "{{ url_for('book_cart') }}"
+    data-action_book   = "{{ url_for('book') }}">
+    </script>
+
 <script>
+
+    const cart_form    = document.getElementById('cart_form');
+    const booking_form = document.getElementById('booking_form');
+
     $(document).ready(function() {
             $('#cartTable').dataTable({
                 responsive:true,
@@ -80,171 +68,42 @@
                     style: 'os',
                     selector: 'td:first-child'
                 },
+                pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
                 language: {
+                    paginate: {
+                        previous: "&lt;",
+                        next: "&gt;"
+                    },
                     emptyTable: "Your cart is empty"
                 }
             });
+
+            // TODO: null makes the function use item_for_cart from the template data
+            updateJSON(booking_form, null );
+
     });
 
-    function updateJSON(form){
-
-        // This is the solution to pass items back and forth as json betweeen flask and jinja2
-        var itemsJSON = [];
-        items = JSON.parse({{items_for_cart |tojson|safe}});
-        console.log(items);
-        items.forEach(item => {
-            itemsJSON.push({id              : item.id,
-                            name            : item.name,
-                            borrower_name   : item.borrower_name,
-                            borrower_email: item.borrower_email, 
-                            borrower_phone  : item.borrower_phone,
-                            location        : item.location,
-                            borrow_date     : item.borrow_date,
-                            return_date     : item.return_date});
-        });
-        console.log("items");
-        console.log(items);
-        // document.getElementById("itemsJSON").value = JSON.stringify(itemsJSON);
-        form.elements["itemsJSON"].value = JSON.stringify(itemsJSON);
-    }
-
-    async function submitForm(actionType, form) {
-
-        console.log("this form");
-        console.log(form);
-
-        // TODO: see if this can be DRY with the same function in item_detail_modals.js
-        var isValidForm = form.checkValidity();
-        if (isValidForm)
-        {
-            console.log("isValidForm");
-            // var returndate = form.elements['return_date'].value
-            
-            // var input = form.elements['return_date']
-            
-            // input.setCustomValidity("p");
-            // if(input.checkValidity()) {
-            //     input.setCustomValidity("watch me break");
-            //     input.reportValidity();
-            // }
-        }
-        else
-        {
-            form.reportValidity();
-            return false;
-        }
-
-
-        form.elements['formAction'].value = actionType;
-
-        // Set form action based on the actionType
-        if (actionType === 'book') {
-
-            form.action = "{{ url_for('book') }}";
-
-        }
-
-        updateJSON(form);
-
-        var name    = form.elements['borrower_name'].value;
-        var contact = form.elements['borrower_email'].value;
-        var phone   = form.elements['borrower_phone'].value;
-        
-        const result = await setBorrowerInfoOnBackend(name, contact, phone, form); 
-
-        // Submit the form
-        // return;
-        form.submit();
-    }
-
-    async function setBorrowerInfoOnBackend(name, contact, phone){
-
-        var name    = name.trim();
-        var contact = contact.trim();
-        var phone   = phone.trim();
-
-        try{
-            const response = await fetch('/set-borrower', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name, contact, phone }),
-                credentials: 'same-origin'
-            });
-
-            if (!response.ok){
-                throw new Error("Failed setting borrower info");
-            }
-
-            const data = await response;
-            console.log("set-borrower response: ", data);
-
-            return data;
-
-        }
-        catch (error){
-            console.error("Error on setting session: ", error);
-            throw error;
-        }
-    
-
-    }
-
-    // This function is duplicated on the item detail modals js
-    function loadBorrowerInfo(form, info){
-
-        // Try in case info is not the righ type
-        try{
-            form.elements['borrower_name'].value    = info.borrower_name
-            form.elements['borrower_email'].value = info.borrower_email
-            form.elements['borrower_phone'].value   = info.borrower_phone
-        }
-        catch (error){
-            console.log(error);
-        }
-    }
-
-    function loadBookedDatesInfo(form, booked_dates){
-        try{
-            form.elements["booked_dates"].value = booked_dates;
-        }
-        catch (error){
-            console.log(error);
-        }
-    }
-
     document.addEventListener('DOMContentLoaded', (event) => {
-        // Get the form element
-        console.log("here1");
-        const form = document.getElementById('cart_form');
 
         // Intercept the form submission
-        form.addEventListener('submit', function(event) {
+        cart_form.addEventListener('submit', function(event) {
 
             event.preventDefault(); // Prevent the form from submitting       
 
-            var info = JSON.parse({{borrower_info |tojson|safe}});
-            const cart_form = document.getElementById('booking_form');
-            loadBorrowerInfo(cart_form, info[0])
+            var info            = JSON.parse({{borrower_info |tojson|safe}});
+            const booking_form  = document.getElementById('booking_form');
+            loadBorrowerInfo(booking_form, info[0])
 
             // TODO: This maybe does not need to be sent to the front end and then back to the back
             const booked_dates = JSON.parse('{{ booked_dates|tojson }}'|| '[]');
-            loadBookedDatesInfo(cart_form, booked_dates);
+
+            loadBookedDatesInfo(booking_form, booked_dates);
                 
-            // show modal that modal saves info 
             $('#bookingModal').modal('show');
-            return;
-
-            // console.log("here");
-            // updateJSON(form);
-
-            // // Trigger the actual form submission
-            // form.submit();
 
         });
     });
 
 </script>
 
-</body>
+{% endblock %}
