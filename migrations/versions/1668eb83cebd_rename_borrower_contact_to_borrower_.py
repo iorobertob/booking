@@ -21,7 +21,7 @@ def upgrade():
     with op.batch_alter_table('booking', schema=None) as batch_op:
         batch_op.add_column(sa.Column('borrower_phone', sa.String(length=100), nullable=False))
         batch_op.alter_column(
-            'borrower_email',
+            'borrower_contact',
             new_column_name='borrower_email',
             existing_type=sa.String(length=100),
             existing_nullable=False
@@ -35,7 +35,7 @@ def downgrade():
     with op.batch_alter_table('booking', schema=None) as batch_op:
         batch_op.alter_column(
             'borrower_email',
-            new_column_name='borrower_email',
+            new_column_name='borrower_contact',
             existing_type=sa.String(length=100),
             existing_nullable=False
         )
