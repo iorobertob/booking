@@ -2,6 +2,7 @@
 let data = document.currentScript.dataset;
 let disabledDates = [];
 let items = [];
+let set_borrower_url = "";
 
 let  returnDatePickerRaw = null;
 let  returnDatePickers   = null;
@@ -276,6 +277,14 @@ function loadBookedDatesInfo(form, booked_dates){
     }
 }
 
+
+function setBorrowerUrl(url){
+
+    set_borrower_url = url;
+
+}
+
+
 /**
  * Sends borrower info to the backend and sets it in the session.
  * @param {string} name - Borrower's name.
@@ -289,7 +298,7 @@ async function setBorrowerInfoOnBackend(name, contact, phone){
     phone   = phone.trim();
 
     try{
-        const response = await fetch('/set-borrower', {
+        const response = await fetch(set_borrower_url, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'

@@ -22,7 +22,7 @@ from msal import ConfidentialClientApplication
 import time
 
 # TODO: Fix this order of things so LOCALHOST can be set from __main__
-LOCALHOST = False
+LOCALHOST = True
 
 # Set up the logging configuration
 logging.basicConfig(level=logging.INFO)
@@ -341,6 +341,7 @@ def logout():
     session.pop("microsoft_user", None)
     session.pop("flow", None)
     session.pop("borrower_info", None)
+    session.pop("user_email", None)
     # Don't use session.clear()
 
     session.modified = True  #  force session to update in some Flask versions
@@ -348,7 +349,7 @@ def logout():
 
 
 
-@app.route('/set-borrower', methods=['POST'])
+@app.route('/set_borrower', methods=['POST'])
 def set_borrower():
     """Saver the borrower's info to the current session"""
 

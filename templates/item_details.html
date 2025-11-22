@@ -96,6 +96,8 @@
 
         initDatePickers();
 
+        setBorrowerUrl({{url_for('set_borrower')}});
+
         $('#bookingTable').dataTable({
                 responsive:true,
                 select: {
