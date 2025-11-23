@@ -22,7 +22,7 @@ from msal import ConfidentialClientApplication
 import time
 
 # TODO: Fix this order of things so LOCALHOST can be set from __main__
-LOCALHOST = True
+LOCALHOST = False
 
 # Set up the logging configuration
 logging.basicConfig(level=logging.INFO)
