@@ -1013,7 +1013,7 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
     ]
 
     # Filter admins based on environment
-    admin_contacts = ALL_ADMIN_CONTACTS if LOCALHOST else DEV_ADMIN_CONTACTS
+    admin_contacts = ALL_ADMIN_CONTACTS if not LOCALHOST else DEV_ADMIN_CONTACTS
 
     # Build BCC list while avoiding duplicates
     borrower_email_lower = borrower_email.lower()
