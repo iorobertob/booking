@@ -1,6 +1,8 @@
 # Booking System
 
 ## TODO:
+* Simplify the email templates. Right now is a bloated html mess. 
+* Implement Flask Blueprints. 
 * add the lmta email to the booking item, for if they change and falsify identity
 * for the pages that need admin privileges, now there is duplicate with decorator and logic inside the function. check that. 
 * Turn add item and other mini pages into modals

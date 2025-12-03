@@ -45,7 +45,7 @@ pymysql.install_as_MySQLdb()
 
 app = Flask(__name__, static_folder='images')
 
-# for prefix forwarding
+# For prefix forwarding
 app.wsgi_app = ProxyFix(
     app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
 )
@@ -250,14 +250,39 @@ def is_microsoft_token_expired():
 
 @app.route("/login_microsoft")
 def login_microsoft():
-    session["flow"] = _build_auth_code_flow(scopes=SCOPE)
-    return redirect(session["flow"]["auth_uri"])
+    flow = _build_auth_code_flow(scopes=SCOPE)
+    session["flow"]  = flow
+    session["state"] = flow["state"]
+    session.modified = True
+    return redirect(flow["auth_uri"])
 
 
 @app.route("/getAToken")
 def authorized():
-    result = _build_msal_app().acquire_token_by_auth_code_flow(
-        session.get("flow", {}), request.args)
+
+    expected_state  = session.get("state")
+    received_state  = request.args.get("state")
+
+    if not session.get("state") or session["state"] != request.args.get("state"):
+        session.pop("state", None)
+        flash("Session expired or invalid. Try again.", "warning")
+        return redirect(url_for("login"))
+
+    if not expected_state or expected_state != received_state:
+        session.pop("state", None)
+        flash("Your login session expired. Please try again.", "warning")
+        return redirect(url_for("login"))
+
+    try:
+        result = _build_msal_app().acquire_token_by_auth_code_flow(
+            session.get("flow", {}), request.args)
+    except ValueError:
+        flash("Invalid login state. Please start again.", "danger")
+        return redirect(url_for("login"))
+
+    # Clear session state
+    session.pop("state", None)
+    session.pop("flow", None)
     
     if "id_token_claims" in result:
 
@@ -337,16 +362,18 @@ def logout():
 
     logout_user()
 
+    pop_session()
+    
+    return redirect(url_for('home'))
+
+def pop_session():
     # Remove any custom session keys, but keep Flask-Login's session structure intact
     session.pop("microsoft_user", None)
     session.pop("flow", None)
     session.pop("borrower_info", None)
     session.pop("user_email", None)
     # Don't use session.clear()
-
     session.modified = True  #  force session to update in some Flask versions
-    return redirect(url_for('home'))
-
 
 
 @app.route('/set_borrower', methods=['POST'])
@@ -489,14 +516,7 @@ def book():
     if session.get("microsoft_user") and is_microsoft_token_expired():
         logout_user()
 
-        # Remove any custom session keys, but keep Flask-Login's session structure intact
-        session.pop("microsoft_user", None)
-        session.pop("flow", None)
-        session.pop("borrower_info", None)
-        session.pop("user_email", None)
-        # Don't use session.clear()
-
-        session.modified = True  #  force session to update in some Flask versions
+        pop_session()
 
         flash("Your session has expired. Please log in again.", "warning")
         return redirect(url_for('login'))
@@ -522,6 +542,7 @@ def book():
 
     user_email = session.get('user_email', '')
     print(user_email)
+    print("borrower_email: " + borrower_email)
 
     for single_item in items_list:
 
@@ -608,14 +629,8 @@ def bookings_list():
     if session.get("microsoft_user") and is_microsoft_token_expired():
         logout_user()
 
-        # Remove any custom session keys, but keep Flask-Login's session structure intact
-        session.pop("microsoft_user", None)
-        session.pop("flow", None)
-        session.pop("borrower_info", None)
-        session.pop("user_email", None)
-        # Don't use session.clear()
+        pop_session()
 
-        session.modified = True  #  force session to update in some Flask versions
         flash("Your session has expired. Please log in again.", "warning")
         return redirect(url_for('login'))
 
@@ -664,7 +679,7 @@ def book_cart():
         # Append to our cart_items list
         cart_items.append({
             "borrower_name"     : borrower_name,
-            "borrower_email"  : borrower_email,
+            "borrower_email"    : borrower_email,
             "borrower_phone"    : borrower_phone,
             "id"                : item['id'],
             "name"              : item['name'],
@@ -733,7 +748,7 @@ def cart():
             item_detail['borrow_date']      = cart_item.get('borrow_date')
             item_detail['return_date']      = cart_item.get('return_date')
             item_detail['borrower_name']    = cart_item.get('borrower_name')
-            item_detail['borrower_email'] = cart_item.get('borrower_email')
+            item_detail['borrower_email']   = cart_item.get('borrower_email')
             item_detail['borrower_phone']   = cart_item.get('borrower_phone')
 
             items_with_booking_info.append(item_detail)
@@ -944,6 +959,8 @@ def check_and_send_reminders_tomorrow():
 
 def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, return_date, subject, text_content, html_content, items, type_of_mail=None, **kargs):
     mail_body = {}
+    
+    logger.info(f"Attempting to email {borrower_email} for {type_of_mail}")
 
     # Loading a different html template depending on what the email is about:
     if type_of_mail == 'return_reminder':
@@ -983,64 +1000,31 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
     mail_from = "booking@ideas-block.com"
     name_from = "MISC booking - DO NOT Reply"
 
-    recipients = [
-        {
-            "name": borrower_name,
-            "email": borrower_email,
-        }
+    # Define all admin contacts 
+    DEV_ADMIN_CONTACTS = [
+        {"name": "Roberto",   "email": "roberto.becerra@lmta.lt"}
+    ]
+    ALL_ADMIN_CONTACTS = [
+        {"name": "Edvinas",         "email": "edvinas.siliunas@lmta.lt"},
+        {"name": "Edvinas Gmail",   "email": "siliunas.edvinas@gmail.com"},
+        {"name": "Roberto",         "email": "roberto.becerra@lmta.lt"},
+        {"name": "Julius",          "email": "julius.aglinskas@lmta.lt"},
+        {"name": "Mantautas",       "email": "mantautas.krukauskas@lmta.lt"},
     ]
 
-    if LOCALHOST:
-        admin_contacts = [
-            # {
-            #     "name": borrower_name,
-            #     "email": borrower_email,
-            # },
-            {
-                "email":"roberto.becerra@lmta.lt",
-                "name":"Roberto"
-            }
-        ]
-    else:
+    # Filter admins based on environment
+    admin_contacts = ALL_ADMIN_CONTACTS if LOCALHOST else DEV_ADMIN_CONTACTS
 
-        admin_contacts = [
-            # {
-            #     "name": borrower_name,
-            #     "email": borrower_email,
-            # },
-            {
-                "name": "Edvinas",
-                "email": "edvinas.siliunas@lmta.lt",
-            },
-            {
-                "name": "Edvinas Gmail",
-                "email": "siliunas.edvinas@gmail.com",
-            },
-            {
-                "name": "Roberto",
-                "email": "roberto.becerra@lmta.lt",
-            },
-            {
-                "name": "Julius",
-                "email": "julius.aglinskas@lmta.lt",
-            },
-            {
-                "name": "Mantautas",
-                "email": "mantautas.krukauskas@lmta.lt",
-            }
-        ]
+    # Build BCC list while avoiding duplicates
+    borrower_email_lower = borrower_email.lower()
+    admin_emails_set = {admin["email"].lower() for admin in admin_contacts}
+    bcc = list(admin_contacts)
 
-    # build BCC list while avoiding duplicates
-    bcc = admin_contacts.copy()
-    for admin in admin_contacts:
-        
-        admin_email          = admin["email"].lower()
-        borrower_email_lower = borrower_email.lower()
+    # Add borrower if not already an admin
+    if borrower_email_lower not in admin_emails_set:
+        bcc.append({"name": borrower_name, "email": borrower_email_lower})
 
-        # skip if borrower is also one of the admins
-        if borrower_email_lower != admin_email:
-            bcc.append({ "name": borrower_name, "email": borrower_email_lower})
-
+    # TODO: If return reminder, send only to borrower. Keep this logic?
     if type_of_mail == 'booking' or type_of_mail == 'deny':
         # mailer.set_bcc_recipients(bcc, mail_body)
         pass
@@ -1055,8 +1039,6 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
           .reply_to_name(name_from)
           .add_note(False)
           .build_update_request())
-
-    # response = mailer.identities.update_identity(request) 
 
     # Send the email
     # TODO: still fix thy it cannot add bcc, it crashes. bug reported. 
