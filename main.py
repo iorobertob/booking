@@ -145,14 +145,14 @@ def favicon():
                           'favicon.ico',mimetype='image/vnd.microsoft.icon')
 
 
-@app.route('/assets/<path:filename>')
-def custom_static(filename):
-    return send_from_directory('assets', filename)
+# @app.route('/assets/<path:filename>')
+# def custom_static(filename):
+#     return send_from_directory('assets', filename)
 
 
-@app.route('/assets/<path:filename>', methods=['GET', 'POST'])
-def custom_images(filename):
-    return send_from_directory('assets/images', filename)
+# @app.route('/assets/<path:filename>', methods=['GET', 'POST'])
+# def custom_images(filename):
+#     return send_from_directory('assets/images', filename)
 
 
 def create_admin_user():
