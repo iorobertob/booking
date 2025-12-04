@@ -78,7 +78,7 @@
     <!-- CUSTOM MODAL JS -->
     <script 
     id  = "item_detail_modals_script" 
-    src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}" 
+    src = "{{ url_for('static', filename='js/item_detail_modals.js') }}" 
     data-disabled_dates= "{{ booked_dates }}"
     data-item_for_cart = '{{ item_for_cart|tojson }}'
     data-action_cart   = "{{ url_for('book_cart',item_id=item.id) }}"

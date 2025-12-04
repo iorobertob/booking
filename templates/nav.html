@@ -1,5 +1,5 @@
 {% block stylesheets %} 
-<link href="{{ url_for('custom_static', filename='css/nav.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='css/nav.css') }}" rel="stylesheet">
 {% endblock %}
 
 <nav class="navbar navbar-expand-lg navbar-dark ">
@@ -10,7 +10,7 @@
         </button>
 
         <a class="navbar-brand" href="{{ url_for('home') }}">
-            <img class="image-brand" src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 30px;">MISC's Booking System
+            <img class="image-brand" src="{{ url_for('static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 30px;">MISC's Booking System
         </a>
 
         <div class="collapse navbar-collapse" id="navbarSupportedContent">

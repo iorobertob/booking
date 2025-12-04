@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="header">
-    <a href="{{ url_for('home')}}"><img src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}"  alt="MISC Logo"></a>
+    <a href="{{ url_for('home')}}"><img src="{{ url_for('static', filename='images/misc_logo_alpha.png') }}"  alt="MISC Logo"></a>
     <h1>All Bookings</h1>
 </div>
 
@@ -72,7 +72,7 @@
 <!-- CUSTOM MODAL JS -->
 <script 
 id  = "item_detail_modals_script" 
-src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}">
+src = "{{ url_for('static', filename='js/item_detail_modals.js') }}">
 </script>
 
 <script>

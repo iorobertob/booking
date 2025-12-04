@@ -3,7 +3,7 @@
 {% block content %}
 
 <a class="navbar-brand" href="{{ url_for('home') }}">
-    <img class="image-brand" src="{{ url_for('custom_static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 100px;"/>
+    <img class="image-brand" src="{{ url_for('static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 100px;"/>
     
 </a>
 <a class="navbar-brand" href="{{ url_for('home') }}">
@@ -69,7 +69,7 @@
 <!-- CUSTOM MODAL JS -->
 <script 
 id  = "item_detail_modals_script" 
-src = "{{ url_for('custom_static', filename='js/item_detail_modals.js') }}" 
+src = "{{ url_for('static', filename='js/item_detail_modals.js') }}" 
 data-action_cart   = "{{ url_for('book_cart') }}"
 data-action_book   = "{{ url_for('book') }}"></script>
 
