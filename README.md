@@ -1,6 +1,7 @@
 # Booking System
 
 ## TODO:
+* Do not serve images from Flask, serve from nginx instead. 
 * Simplify the email templates. Right now is a bloated html mess. 
 * Implement Flask Blueprints. 
 * add the lmta email to the booking item, for if they change and falsify identity

@@ -1,90 +1,82 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>{{ subject or "MISC Booking Email" }}</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f1f1f1;
-      margin: 0; padding: 0;
-    }
-    .container {
-      width: 100%;
-      max-width: 640px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-    }
-    .footer {
-      text-align: center;
-      font-size: 12px;
-      color: #999;
-      padding: 20px 0;
-      background: #383e56;
-      color: white;
-    }
-    h1 { margin: 0; font-size: 24px; }
-    p  { font-size: 14px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-            <td align="center">
+  <head>
+    <meta charset="UTF-8">
+    <title>{{ subject or "MISC Booking Email" }}</title>
+  </head>
+  <body style="margin:0; padding:0; font-family:Arial, sans-serif; background-color:#f1f1f1;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f1f1; padding:20px 0;">
+      <tr>
+        <td align="center">
+          <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff; padding:20px;">
+            
+            <!-- Logo -->
+            <tr>
+              <td align="center" style="padding-bottom:20px;">
                 <a href="https://misc.lmta.lt/booking">
-                    <div style="height:100%;width:100%">                                            
-                        <img src="https://misc.lmta.lt/booking/assets/images/misc_logo_alpha.png" alt="Logo" width="220" height="auto" class="logo">
-                    </div>
+                  <img src="https://misc.lmta.lt/booking/assets/images/misc_logo_alpha.png" alt="MISC Logo" width="180" style="display:block;">
                 </a>
-            </td>
-        </tr>
-        <tr>
-            <td align="center" style="padding: 30px;">
-                <img src="https://misc.lmta.lt/booking/assets/images/invoice-order-icon.png" width="80" alt="Booking Icon" />
-                <h1 style="font-size: 24px; margin: 20px 0;">Booking Confirmation</h1>
-                <p style="font-size: 16px;">Here’s what you booked. This request must be approved by the administrator.</p>
-            </td>
-        </tr>
+              </td>
+            </tr>
 
-        <tr>
-            <td style="padding: 20px;">
-                <table width="100%" cellpadding="10" cellspacing="0" border="0" style="background: #f9f9f9;">
-                    <thead>
-                        <tr style="font-weight: bold; text-align: left;">
-                            <td>Item</td>
-                            <td>Dates</td>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in items %}
-                        <tr>
-                            <td>{{ item.item_name }}</td>
-                            <td>{{ item.borrow_date.strftime('%Y-%m-%d') }} to {{ item.return_date.strftime('%Y-%m-%d') }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
+            <!-- Icon and Title -->
+            <tr>
+              <td align="center" style="padding:20px;">
+                <img src="https://misc.lmta.lt/booking/assets/images/invoice-order-icon.png" alt="Booking Icon" width="60" style="display:block; margin: 0 auto;">
+                <h1 style="font-size:22px; margin:20px 0 10px;">Booking Confirmation</h1>
+                <p style="font-size:16px; color:#333333; margin:0;">
+                  Here’s what you booked. This request must be approved by the administrator.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Booking Table -->
+            <tr>
+              <td style="padding:20px;">
+                <table width="100%" cellpadding="10" cellspacing="0" border="0" style="background-color:#f9f9f9; border-collapse:collapse;">
+                  <thead>
+                    <tr style="background-color:#eaeaea; text-align:left;">
+                      <th style="padding:10px;">Item</th>
+                      <th style="padding:10px;">Dates</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in items %}
+                    <tr>
+                      <td style="padding:10px;">{{ item.item_name }}</td>
+                      <td style="padding:10px;">
+                        {{ item.borrow_date.strftime('%Y-%m-%d') }} to {{ item.return_date.strftime('%Y-%m-%d') }}
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
                 </table>
-            </td>
-        </tr>
+              </td>
+            </tr>
 
-        <tr>
-            <td style="padding: 20px;">
+            <!-- Borrower Info -->
+            <tr>
+              <td style="padding:20px; font-size:14px; color:#333;">
                 <strong>Borrower:</strong><br>
                 {{ borrower_name }}<br><br>
                 <strong>Contact:</strong><br>
                 {{ borrower_email }}<br>
-                {{ borrower_phone }}<br>
-                Account Email: {{ user_email }}
-            </td>
-        </tr>
+                {{ borrower_phone or '' }}<br>
+                Account Email: {{ user_email or '' }}
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" style="background-color:#383e56; color:#ffffff; font-size:12px; padding:15px;">
+                &copy; {{ now.year }} MISC.LMTA <br>
+                Gedimino pr. 42, Vilnius, Lithuania
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
     </table>
-    <div class="footer">
-        © {{ now.year }} MISC.LMTA <br>
-        Gedimino pr. 42, Vilnius, Lithuania
-      </div>
-  </div>
-  
-</body>
+  </body>
 </html>
