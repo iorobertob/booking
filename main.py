@@ -139,10 +139,10 @@ class User(UserMixin, db.Model):
     last_name   = db.Column(db.String(50), nullable=True)   # start as nullable
 
 
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'assets/images'),
-                          'favicon.ico',mimetype='image/vnd.microsoft.icon')
+# @app.route('/favicon.ico')
+# def favicon():
+#     return send_from_directory(os.path.join(app.root_path, 'assets/images'),
+#                           'favicon.ico',mimetype='image/vnd.microsoft.icon')
 
 
 # @app.route('/assets/<path:filename>')
