@@ -1,6 +1,7 @@
 # Booking System
 
 ## TODO:
+* Add fields to user model to register sign up date and last login, booked items
 * Do not serve images from Flask, serve from nginx instead. 
 * Simplify the email templates. Right now is a bloated html mess. 
 * Implement Flask Blueprints. 
