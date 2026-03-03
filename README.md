@@ -1,6 +1,8 @@
 # Booking System
 
 ## TODO:
+* Students shoudl add a note in their profile and/or booking on what do they study and what is this booking for. 
+* Send emails on lent and on returned
 * Do not serve images from Flask, serve from nginx instead. 
 * Simplify the email templates. Right now is a bloated html mess. 
 * Implement Flask Blueprints. 
