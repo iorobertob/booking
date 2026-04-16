@@ -1,4 +1,17 @@
 
+/**
+ * Generate a deterministic HSL color from a string (e.g. borrower name).
+ * Same name always produces the same color.
+ * @param {string} str
+ * @returns {string} CSS hsl() color
+ */
+function colorFromString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    const h = Math.abs(hash) % 360;
+    return `hsl(${h}, 55%, 72%)`;
+}
+
 let data = document.currentScript.dataset;
 let disabledDates = [];
 let items = [];
@@ -31,8 +44,7 @@ function setupCalendar(booking_dates){
     var bookingDates  = booking_dates;
 
     var events = bookingDates.map(function(bookingDates) {
-        var rand = Math.floor(Math.random() * 10);
-        var colorQ = "rgb(" + (215 - rand * 3) + "," + (185 - rand * 5) + "," + (185 - rand * 10) + " )"; 
+        var colorQ = colorFromString(bookingDates.borrower_name);
 
         return {
             title: bookingDates.borrower_name,
@@ -256,10 +268,9 @@ function loadBorrowerInfo(form, info){
 
     // Try in case info is not the righ type
     if(form.elements['borrower_name']){
-        
-        form.elements['borrower_name'].value    = info.borrower_name
-        form.elements['borrower_email'].value   = info.borrower_email
-        form.elements['borrower_phone'].value   = info.borrower_phone  
+        form.elements['borrower_name'].value  = info.borrower_name  || '';
+        form.elements['borrower_email'].value = info.borrower_email || '';
+        form.elements['borrower_phone'].value = info.borrower_phone || '';
     }
 }
 
@@ -352,23 +363,27 @@ function updateJSON(form, items_json){
 
     var borrower_name   = form.elements['borrower_name' ] ? form.elements['borrower_name' ].value : null;
     var borrower_email  = form.elements['borrower_email'] ? form.elements['borrower_email'].value : null;
-    var borrower_phone  = form.elements['borrower_phone'] ? form.elements['borrower_phone'].value : null; 
+    var borrower_phone  = form.elements['borrower_phone'] ? form.elements['borrower_phone'].value : null;
+    var booking_note    = form.elements['booking_note']   ? form.elements['booking_note'].value   : '';
 
     for (const item of itemsArray) {
         borrower_name   = item.borrower_name    ? item.borrower_name    : borrower_name;
         borrower_email  = item.borrower_email   ? item.borrower_email   : borrower_email;
-        borrower_phone  = item.borrower_phone   ? item.borrower_phone   : borrower_phone; 
+        borrower_phone  = item.borrower_phone   ? item.borrower_phone   : borrower_phone;
         borrowing_date  = item.borrow_date      ? item.borrow_date      : borrowing_date;
-        returning_date  = item.return_date      ? item.return_date      : returning_date; 
-        
+        returning_date  = item.return_date      ? item.return_date      : returning_date;
+        // Use form note if present; fall back to item note from session (cart flow)
+        if (!booking_note && item.note) { booking_note = item.note; }
+
         itemsJSON.push({id              : item.id,
                         name            : item.name,
                         borrower_name   : borrower_name,
-                        borrower_email  : borrower_email, 
+                        borrower_email  : borrower_email,
                         borrower_phone  : borrower_phone,
                         location        : item.location,
                         borrow_date     : borrowing_date,
-                        return_date     : returning_date});
+                        return_date     : returning_date,
+                        note            : booking_note});
     }
 
     form.elements['itemsJSON'].value = JSON.stringify(itemsJSON);
@@ -474,7 +489,12 @@ async function submitForm(actionType, form) {
         var contact = form.elements['borrower_email'].value;
         var phone   = form.elements['borrower_phone'].value;
 
-        const result = await setBorrowerInfoOnBackend(name, contact, phone); 
+        try {
+            await setBorrowerInfoOnBackend(name, contact, phone);
+        } catch(e) {
+            console.error("Could not save borrower info to session:", e);
+            // Continue — book() will fall back to itemsJSON
+        }
     }
 
     form.submit();

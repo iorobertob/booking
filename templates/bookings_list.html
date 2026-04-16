@@ -21,6 +21,7 @@
             <th>Email</th>
             <th>Phone</th>
             <th>Status</th>
+            <th>Note</th>
             {% if current_user.is_admin %}
             <th>Actions</th>
             {% endif %}
@@ -44,6 +45,7 @@
                 </td>
                 <td>{{ booking.borrower_phone }}</td>
                 <td>{{ booking.status }}</td>
+                <td>{{ booking.note or '' }}</td>
                 {% if current_user.is_admin %}
                     <td>
                     {% if booking.status == 'booked' and current_user.is_admin %}

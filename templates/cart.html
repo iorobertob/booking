@@ -90,11 +90,11 @@
         // Intercept the form submission
         cart_form.addEventListener('submit', function(event) {
 
-            event.preventDefault(); // Prevent the form from submitting       
+            event.preventDefault(); // Prevent the form from submitting
 
-            var info            = JSON.parse({{borrower_info |tojson|safe}});
+            var info            = JSON.parse({{ borrower_info | tojson | safe }} || '[]');
             const booking_form  = document.getElementById('booking_form');
-            loadBorrowerInfo(booking_form, info[0])
+            if (info.length > 0) { loadBorrowerInfo(booking_form, info[0]); }
 
             // TODO: This maybe does not need to be sent to the front end and then back to the back
             const booked_dates = JSON.parse('{{ booked_dates|tojson }}'|| '[]');

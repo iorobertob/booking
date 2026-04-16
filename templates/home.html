@@ -36,12 +36,13 @@
         </thead>
         <tbody>
             {% for item in items %}
-                <tr>
-                    <td><input class="form-check-input item-checkbox" type="checkbox" value="{{item.id}}" id="checkbox_{{item.id}}"></td>
+                <tr{% if item.is_bookable is false %} class="table-secondary"{% endif %}>
+                    <td><input class="form-check-input item-checkbox" type="checkbox" value="{{item.id}}" id="checkbox_{{item.id}}"{% if item.is_bookable is false %} disabled{% endif %}></td>
                     <td class="clickable-cell">
                       <a href="{{url_for('item_details',item_id=item.id)}}" style="display: block; width: 100%; height: 100%;">
                         {{ item.name }}
                       </a>
+                      {% if item.is_bookable is false %}<small class="text-muted">(not bookable)</small>{% endif %}
                     </td>
                     <td>{{ item.location }}</td>
                     <td>{{ availability[loop.index-1] }}</td>
@@ -49,10 +50,14 @@
                     <td>{{ bookings[loop.index-1].borrower_email }}</td>
                     <td>{{ bookings[loop.index-1].borrow_date.strftime('%Y-%m-%d') if bookings[loop.index-1].borrow_date else '' }}</td>
                     <td>{{ bookings[loop.index-1].return_date.strftime('%Y-%m-%d') if bookings[loop.index-1].return_date else '' }}</td>
-                    <td> 
-                        <a href="javascript:void(0);" onclick="bookSelectedItems('book', {{item.id}})" >Book</a>
+                    <td>
+                        {% if item.is_bookable %}
+                        <a href="javascript:void(0);" onclick="bookSelectedItems('book', {{item.id}})">Book</a>
+                        {% else %}
+                        <span class="text-muted">Book</span>
+                        {% endif %}
                     {% if current_user.is_admin %}
-                        | <a href="{{ url_for('delete_item', item_id=item.id) }}">Delete</a>
+                        | <button type="button" class="btn btn-link p-0" style="vertical-align:baseline;" onclick="showDeleteModal({{item.id}}, '{{item.name|e}}')">Delete</button>
                         | <a href="{{ url_for('edit_item', item_id=item.id) }}">Edit</a>
                     {% endif %}
                 </td>
@@ -131,7 +136,6 @@ data-action_book   = "{{ url_for('book') }}"></script>
             const result = await response.json();
 
             // Load info from the server
-            var info            = JSON.parse({{borrower_info |tojson|safe}});
             const booking_form  = document.getElementById('booking_form');
             var info = JSON.parse({{ borrower_info | tojson | safe }} || '[]');
             if (info.length > 0) {
@@ -159,6 +163,37 @@ data-action_book   = "{{ url_for('book') }}"></script>
     }
 
 
+</script>
+
+<!-- Confirm Delete Modal -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmDeleteModalLabel">Confirm Delete</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete <strong id="deleteItemName"></strong>? This will also remove all associated bookings.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form id="deleteItemForm" method="POST">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    function showDeleteModal(itemId, itemName) {
+        document.getElementById('deleteItemName').textContent = itemName;
+        const baseUrl = "{{ url_for('delete_item', item_id=0) }}";
+        document.getElementById('deleteItemForm').action = baseUrl.replace(/\/0$/, '/' + itemId);
+        var modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+        modal.show();
+    }
 </script>
 
 {% endblock %}

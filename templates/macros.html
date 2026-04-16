@@ -38,6 +38,9 @@
                 
                 {% endif %}
                 
+                <label for="booking_note">Note:</label>
+                <textarea name="booking_note" id="booking_note" class="form-control mb-2" placeholder="Purpose / study programme" rows="2" required></textarea>
+
                 <!-- Flask logic works with these 3 objects' data and structures -->
                 <input type="hidden" name="itemsJSON"     id="itemsJSON"    value="">
                 <input type="hidden" name="booked_dates"  id="booked_dates" value="">

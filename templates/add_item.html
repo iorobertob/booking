@@ -1,68 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Item</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f4f4f4;
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        form {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        label {
-            font-weight: bold;
-            display: block;
-            margin-top: 10px;
-        }
-        input[type="text"] {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #34495e;
-            color: white;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 20px;
-            width: 100%;
-        }
-        button:hover {
-            background-color: #2c3e50;
-        }
-    </style>
-</head>
-<body class="dialogs">
-    <form method="post" action="">
+{% extends 'base.html' %}
+
+{% block content %}
+
+{% if not current_user.is_authenticated or not current_user.is_admin %}
+    <div class="alert alert-danger">You do not have permission to access this page.</div>
+{% else %}
+
+<div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+
         <h1>Add Item</h1>
-        <label for="name">Item Name:</label>
-        <input type="text" id="name" name="name" required><br>
-        <label for="location">Item Location:</label>
-        <input type="text" id="location" name="location" required><br>
-        <button type="submit">Add Item</button>
-    </form>
-</body>
-</html>
+        <hr>
+
+        <form method="post" action="">
+
+            <div class="mb-3">
+                <label for="name" class="form-label">Item Name</label>
+                <input type="text" id="name" name="name" required class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label for="location" class="form-label">Location</label>
+                <select id="location" name="location" required class="form-select">
+                    <option value="" disabled selected>— select location —</option>
+                    {% for loc in locations %}
+                    <option value="{{ loc.name }}">{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input type="checkbox" id="is_bookable" name="is_bookable" checked class="form-check-input">
+                <label for="is_bookable" class="form-check-label">Available for booking</label>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary" style="background-color: #34495e; border: none;">
+                    Add Item
+                </button>
+                <a href="{{ url_for('home') }}" class="btn btn-link text-muted text-center">Cancel</a>
+            </div>
+
+        </form>
+
+    </div>
+</div>
+
+{% endif %}
+
+{% endblock %}

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html id="html-root" lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,10 +33,43 @@
     <!-- CUSTOM STYLES -->
     <link href="{{ url_for('static', filename='css/booking.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/nav.css') }}" rel="stylesheet">
-    
+
+    <!-- TAILWIND CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = {
+      corePlugins: {
+        preflight:  false,   /* don't fight Bootstrap's base styles */
+        container:  false,   /* don't override Bootstrap's .container */
+      },
+      darkMode: 'class',
+      blocklist: ['collapse'],  /* don't generate visibility:collapse — clashes with Bootstrap's .collapse */
+    }</script>
+
+    <!-- DARK MODE INIT (runs before body renders to avoid flash) -->
+    <script>
+      (function() {
+        var stored = localStorage.getItem('theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var dark = stored ? stored === 'dark' : prefersDark;
+        var root = document.getElementById('html-root');
+        if (dark) {
+          root.classList.add('dark');
+          root.setAttribute('data-bs-theme', 'dark');
+        }
+      })();
+    </script>
+
 </head>
 <body>
     {% include 'nav.html' %}
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.container .modal').forEach(function(m) {
+          document.body.appendChild(m);
+        });
+      });
+    </script>
 
     <div class="container mt-4">
         

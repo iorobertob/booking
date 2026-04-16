@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="row">
+    <div class="col-md-6">
+        <h2 class="mb-3">My Profile</h2>
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Email (login)</label>
+                <input type="text" class="form-control" value="{{ current_user.email or current_user.username }}" disabled>
+            </div>
+            <div class="mb-3">
+                <label for="first_name" class="form-label">First Name</label>
+                <input type="text" id="first_name" name="first_name" class="form-control"
+                       value="{{ current_user.first_name or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="last_name" class="form-label">Last Name</label>
+                <input type="text" id="last_name" name="last_name" class="form-control"
+                       value="{{ current_user.last_name or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="phone" class="form-label">Phone</label>
+                <input type="tel" id="phone" name="phone" class="form-control"
+                       value="{{ current_user.phone or '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="course" class="form-label">Study Programme / Course</label>
+                <input type="text" id="course" name="course" class="form-control"
+                       list="programmes-list"
+                       value="{{ current_user.course or '' }}"
+                       placeholder="Start typing or select…">
+                <datalist id="programmes-list">
+                    {% for prog in programmes %}
+                    <option value="{{ prog.name }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Profile</button>
+        </form>
+    </div>
+</div>
+
+<hr class="my-4">
+
+<h4>My Bookings</h4>
+{% if bookings %}
+<div class="table-responsive">
+<table id="myBookingsTable" class="table table-striped table-hover">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Items</th>
+            <th>Note</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for b in bookings %}
+        <tr>
+            <td>{{ b.id }}</td>
+            <td>{{ b.borrow_date.strftime('%Y-%m-%d') if b.borrow_date else '' }}</td>
+            <td>{{ b.booking_items | length if b.booking_items else 1 }}</td>
+            <td>{{ b.note or '' }}</td>
+            <td>
+                <span class="badge
+                    {% if b.status == 'booked' %}bg-warning text-dark
+                    {% elif b.status == 'lent' %}bg-primary
+                    {% else %}bg-secondary{% endif %}">
+                    {{ b.status }}
+                </span>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+<script>
+$(document).ready(function() {
+    $('#myBookingsTable').DataTable({ order: [[0,'desc']], responsive: true });
+});
+</script>
+{% else %}
+<p class="text-muted">No bookings yet.</p>
+{% endif %}
+
+{% endblock %}

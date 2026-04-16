@@ -6,7 +6,7 @@ pymysql
 gunicorn
 mailersend
 Flask-Migrate
-jsonpickle
+python-dotenv
 APScheduler
 msal
 

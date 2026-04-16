@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="mb-0">Manage Locations</h1>
+</div>
+<hr>
+
+<div class="row">
+    <div class="col-md-8 col-lg-6">
+        <h5>Add New Location</h5>
+        <form method="post" action="{{ url_for('add_location') }}" class="d-flex gap-2">
+            <input type="text" name="name" class="form-control" placeholder="Location name" required>
+            <button type="submit" class="btn btn-primary">Add</button>
+        </form>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8 col-lg-6">
+        <h5>Existing Locations</h5>
+        {% if locations %}
+        <div class="table-responsive">
+        <table class="table table-bordered table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th style="white-space:nowrap; width:1%;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for loc in locations %}
+                <tr id="loc-row-{{ loc.id }}">
+                    <td>
+                        <span class="loc-name" id="loc-name-{{ loc.id }}">{{ loc.name }}</span>
+                        <form class="loc-edit-form d-none" id="loc-edit-form-{{ loc.id }}"
+                              method="post" action="{{ url_for('edit_location', location_id=loc.id) }}">
+                            <div class="d-flex gap-1">
+                                <input type="text" name="name" class="form-control form-control-sm"
+                                       value="{{ loc.name }}" required>
+                                <button type="submit" class="btn btn-success btn-sm">Save</button>
+                                <button type="button" class="btn btn-secondary btn-sm"
+                                        onclick="cancelLocEdit({{ loc.id }})">Cancel</button>
+                            </div>
+                        </form>
+                    </td>
+                    <td style="white-space:nowrap; width:1%;">
+                        <button type="button" class="btn btn-outline-primary btn-sm"
+                                id="loc-edit-btn-{{ loc.id }}"
+                                onclick="startLocEdit({{ loc.id }})">Edit</button>
+                        <form method="post" action="{{ url_for('delete_location', location_id=loc.id) }}"
+                              class="d-inline">
+                            <button type="submit" class="btn btn-danger btn-sm"
+                                    onclick="return confirm('Delete \'{{ loc.name }}\'?')">&#128465;</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No locations defined yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function startLocEdit(id) {
+    document.getElementById('loc-name-' + id).classList.add('d-none');
+    document.getElementById('loc-edit-form-' + id).classList.remove('d-none');
+    document.getElementById('loc-edit-btn-' + id).classList.add('d-none');
+}
+function cancelLocEdit(id) {
+    document.getElementById('loc-name-' + id).classList.remove('d-none');
+    document.getElementById('loc-edit-form-' + id).classList.add('d-none');
+    document.getElementById('loc-edit-btn-' + id).classList.remove('d-none');
+}
+</script>
+
+{% endblock %}

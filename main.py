@@ -1,4 +1,5 @@
 import argparse
+import re
 from functools import wraps
 from flask import session, Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, abort
 from mailersend import MailerSendClient, EmailBuilder, IdentityBuilder
@@ -12,17 +13,18 @@ from datetime import datetime, timedelta
 import pymysql
 import json
 import os
-import jsonpickle
+from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 import logging
 from logging.handlers import RotatingFileHandler
 from collections import defaultdict
+from types import SimpleNamespace
 from msal import ConfidentialClientApplication
 import time
 
-# TODO: Fix this order of things so LOCALHOST can be set from __main__
-LOCALHOST = False
+load_dotenv()  # loads .env if present; no-op if absent
+LOCALHOST = os.environ.get('MISC_DEV', 'false').lower() in ('1', 'true', 'yes')
 
 # Set up the logging configuration
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +45,54 @@ logger.addHandler(handler)
 
 pymysql.install_as_MySQLdb()
 
+# Helper to read from env var first, then vars/vars.json fallback
+_EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$')
+
+def _borrower_info_for_user(user):
+    """Build a borrower_info JSON string from a logged-in User, or return False."""
+    name  = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    email_candidate = user.email or user.username or ''
+    email = email_candidate if _EMAIL_RE.match(email_candidate) else ''
+    phone = user.phone or ''
+    if not (name or email):
+        return False
+    return json.dumps([{"borrower_name": name, "borrower_email": email, "borrower_phone": phone}])
+
+_vars_json = None
+def _cfg(env_key, json_key=None):
+    val = os.environ.get(env_key)
+    if val is not None:
+        return val
+    global _vars_json
+    if _vars_json is None:
+        try:
+            with open('vars/vars.json') as f:
+                _vars_json = json.load(f)
+        except FileNotFoundError:
+            _vars_json = {}
+    return _vars_json.get(json_key or env_key)
+
+SECRET_KEY      = _cfg('SECRET_KEY',           'secret_key')
+DB_USERNAME     = _cfg('DB_USERNAME',           'db_username')
+DB_PASSWORD     = _cfg('DB_PASSWORD',           'db_password')
+DB_NAME         = _cfg('DB_NAME',               'database')
+MAILERSEND_KEY  = _cfg('MAILERSEND_API_KEY',    'mailersend_api_key')
+MISC_PASSWORD   = _cfg('MISC_PASSWORD',         'misc_password')
+CLIENT_ID       = _cfg('AZURE_CLIENT_ID')
+CLIENT_SECRET   = _cfg('AZURE_CLIENT_SECRET')
+TENANT_ID       = _cfg('AZURE_TENANT_ID')
+
+_admin_emails_raw = _cfg('ADMIN_EMAILS',        'admin_emails')
+# ADMIN_EMAILS: env var is comma-separated string; vars.json is a list
+if isinstance(_admin_emails_raw, str):
+    ADMIN_EMAILS = set(e.strip().lower() for e in _admin_emails_raw.split(',') if e.strip())
+else:
+    ADMIN_EMAILS = set(e.lower() for e in (_admin_emails_raw or []))
+
+AUTHORITY     = f"https://login.microsoftonline.com/{TENANT_ID}"
+REDIRECT_PATH = "/getAToken"
+SCOPE         = ["User.Read"]
+
 # app = Flask(__name__, static_folder='images')
 app = Flask(__name__)
 # For prefix forwarding
@@ -50,40 +100,16 @@ app.wsgi_app = ProxyFix(
     app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1
 )
 
-if LOCALHOST:
-    vars_path = "vars/vars.json"
-else:
+if not LOCALHOST:
+    app.config['APPLICATION_ROOT'] = '/booking'
     scheduler = BackgroundScheduler(daemon=True)
-
-    # Shut down the scheduler when exiting the app
     atexit.register(lambda: scheduler.shutdown())
 
-    app.config['APPLICATION_ROOT'] = '/booking'
-    vars_path = "vars/vars.json"
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql://{DB_USERNAME}:{DB_PASSWORD}@localhost/{DB_NAME}'
+app.config['SECRET_KEY'] = SECRET_KEY
 
-with open(vars_path, "r") as file:
-    vars_json = json.load(file)
-    username  = str(vars_json.get("db_username"))
-    password  = str(vars_json.get("db_password"))
-    database  = str(vars_json.get("database"))
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://'+username+':'+password+'@localhost/'+database
+mailer = MailerSendClient(api_key=str(MAILERSEND_KEY))
 
-    app.config['SECRET_KEY'] = vars_json.get("secret_key")
-
-    # Initialize MailerSend
-    mailer = MailerSendClient(api_key=str(vars_json.get("mailersend_api_key")))
-
-    # Admin emails
-    ADMIN_EMAILS = set(email.lower() for email in vars_json.get("admin_emails", []))
-
-    # Microsoft Login
-    CLIENT_ID     = vars_json.get("AZURE_CLIENT_ID")
-    CLIENT_SECRET = vars_json.get("AZURE_CLIENT_SECRET")
-    TENANT_ID     = vars_json.get("AZURE_TENANT_ID")
-    AUTHORITY     = f"https://login.microsoftonline.com/{TENANT_ID}"
-    REDIRECT_PATH = "/getAToken"
-    SCOPE         = ["User.Read"]
-    
 db = SQLAlchemy(app)
 
 migrate = Migrate(app, db)
@@ -103,6 +129,8 @@ class Booking(db.Model):
     borrow_date     = db.Column(db.DateTime,    nullable=False)
     return_date     = db.Column(db.DateTime,    nullable=False)
     status          = db.Column(db.String(20),  default='booked')
+    note            = db.Column(db.String(300), default='', nullable=True)
+    booking_items   = db.relationship('BookingItem', back_populates='booking', cascade='all, delete-orphan')
     item            = db.relationship('Item',   back_populates='bookings')
 
     def to_dict(self):
@@ -117,6 +145,7 @@ class Booking(db.Model):
             "borrow_date"   : self.borrow_date.isoformat() if self.borrow_date else None,
             "return_date"   : self.return_date.isoformat() if self.return_date else None,
             "status"        : self.status,
+            "note"          : self.note or '',
         }
 
 # Define the Item model
@@ -126,7 +155,35 @@ class Item(db.Model):
     location        = db.Column(db.String(100), nullable=False)
     manual_link     = db.Column(db.String(200), default='')
     photo_path      = db.Column(db.String(200), default='')
+    is_bookable     = db.Column(db.Boolean,     default=True, nullable=False)
     bookings        = db.relationship('Booking', order_by=Booking.id, back_populates='item')
+
+class BookingItem(db.Model):
+    id          = db.Column(db.Integer, primary_key=True)
+    booking_id  = db.Column(db.Integer, db.ForeignKey('booking.id', ondelete='CASCADE'), nullable=False)
+    item_id     = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)
+    item_name   = db.Column(db.String(100), nullable=False)
+    borrow_date = db.Column(db.DateTime, nullable=False)
+    return_date = db.Column(db.DateTime, nullable=False)
+    booking     = db.relationship('Booking', back_populates='booking_items')
+    item        = db.relationship('Item')
+
+    @property
+    def borrower_name(self):  return self.booking.borrower_name
+    @property
+    def borrower_email(self): return self.booking.borrower_email
+    @property
+    def borrower_phone(self): return self.booking.borrower_phone
+    @property
+    def status(self):         return self.booking.status
+    @property
+    def note(self):           return self.booking.note
+
+
+class Location(db.Model):
+    id   = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+
 
 # Define the User model
 class User(UserMixin, db.Model):
@@ -135,24 +192,16 @@ class User(UserMixin, db.Model):
     password    = db.Column(db.String(128), nullable=False)
     email       = db.Column(db.String(100), nullable=True)
     is_admin    = db.Column(db.Boolean, default=False)
-    first_name  = db.Column(db.String(50), nullable=True)  # start as nullable
-    last_name   = db.Column(db.String(50), nullable=True)   # start as nullable
+    first_name  = db.Column(db.String(50),  nullable=True)
+    last_name   = db.Column(db.String(50),  nullable=True)
+    phone       = db.Column(db.String(30),  nullable=True)
+    course      = db.Column(db.String(200), nullable=True)
 
 
-# @app.route('/favicon.ico')
-# def favicon():
-#     return send_from_directory(os.path.join(app.root_path, 'assets/images'),
-#                           'favicon.ico',mimetype='image/vnd.microsoft.icon')
+class Programme(db.Model):
+    id   = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False)
 
-
-# @app.route('/assets/<path:filename>')
-# def custom_static(filename):
-#     return send_from_directory('assets', filename)
-
-
-# @app.route('/assets/<path:filename>', methods=['GET', 'POST'])
-# def custom_images(filename):
-#     return send_from_directory('assets/images', filename)
 
 
 def create_admin_user():
@@ -164,9 +213,34 @@ def create_admin_user():
 
         admin_exists = User.query.filter_by(username='admin').first() is not None
         if not admin_exists:
-            admin_user = User(username='admin', password=generate_password_hash(str(vars_json.get("misc_password")), method='pbkdf2'), is_admin=True)
+            admin_user = User(username='admin', password=generate_password_hash(str(MISC_PASSWORD), method='pbkdf2'), is_admin=True)
             db.session.add(admin_user)
             db.session.commit()
+
+
+def create_default_locations():
+    """Pre-populate Location table with default locations A, B, C."""
+    with app.app_context():
+        for name in ['A', 'B', 'C']:
+            if not Location.query.filter_by(name=name).first():
+                db.session.add(Location(name=name))
+        db.session.commit()
+
+
+def create_default_programmes():
+    """Pre-populate Programme table with default study programmes."""
+    with app.app_context():
+        defaults = [
+            'Music Innovations Studies',
+            'Music Technologies',
+            'Sound Engineering',
+            'Composition',
+            'Other',
+        ]
+        for name in defaults:
+            if not Programme.query.filter_by(name=name).first():
+                db.session.add(Programme(name=name))
+        db.session.commit()
 
 
 def admin_required(f):
@@ -187,6 +261,7 @@ def load_user(user_id):
 
 
 @app.route('/session-dump')
+@admin_required
 def session_dump():
     return jsonify(dict(session))
 
@@ -209,16 +284,22 @@ def home():
 
     bookings = []
     for item in items:
-        item_bookings = Booking.query.filter_by(item_id = item.id, status = "lent").first()
-        bookings.append(item_bookings)
+        # New-style: lent booking via BookingItem
+        booking = db.session.query(Booking).join(BookingItem).filter(
+            BookingItem.item_id == item.id, Booking.status == 'lent'
+        ).first()
+        # Fallback old-style
+        if not booking:
+            booking = Booking.query.filter_by(item_id=item.id, status='lent').first()
+        bookings.append(booking)
 
-    if 'borrower_info' not in session:
-        borrower_info = False
+    borrower_info_session = session.get('borrower_info')
+    if borrower_info_session and borrower_info_session != {}:
+        borrower_info = json.dumps(borrower_info_session)
+    elif current_user.is_authenticated:
+        borrower_info = _borrower_info_for_user(current_user)
     else:
-        if session.get('borrower_info') == {}:
-            borrower_info = False
-        else:
-            borrower_info = json.dumps(session.get('borrower_info'))
+        borrower_info = False
 
     if request.args.get('flash') == 'select_items':
         flash("Select at least one item before booking.", "warning")
@@ -307,7 +388,7 @@ def authorized():
         borrower_info.append({
             "borrower_name"     : first_name,
             "borrower_email"    : email,
-            "borrower_phone"    : None
+            "borrower_phone"    : ''
         })
         session['borrower_info'] = borrower_info
         session.modified = True
@@ -317,22 +398,26 @@ def authorized():
         # Try to find existing user by email
         user = User.query.filter_by(username=email).first()
 
+        is_new_user = False
         if not user:
-            # Create a new user
-            # TODO: is the password in here created the same not a security hole?
+            is_new_user = True
             user = User(
                 username    = email,
                 email       = email,
                 first_name  = first_name,
                 last_name   = last_name,
                 password    = generate_password_hash("office_placeholder_password", method='pbkdf2:sha256'),
-                is_admin    = email.lower() in ADMIN_EMAILS  # optional: set based on your policy
+                is_admin    = email.lower() in ADMIN_EMAILS
             )
             db.session.add(user)
             db.session.commit()
 
         # Log the user in
         login_user(user)
+
+        if is_new_user:
+            flash('Welcome! Please complete your profile.', 'info')
+            return redirect(url_for('profile'))
 
     return redirect(url_for("home"))
 
@@ -377,6 +462,7 @@ def pop_session():
 
 
 @app.route('/set_borrower', methods=['POST'])
+@login_required
 def set_borrower():
     """Saver the borrower's info to the current session"""
 
@@ -397,8 +483,17 @@ def set_borrower():
 @app.route('/item/<int:item_id>', methods=['GET', 'POST'])
 def item_details(item_id):
     item = Item.query.get_or_404(item_id)
-    
-    bookings = Booking.query.filter_by(item_id=item_id).all()
+
+    # Old-style (no BookingItem children)
+    old_bookings = Booking.query.filter(
+        Booking.item_id == item_id,
+        ~Booking.booking_items.any(),
+    ).all()
+    # New-style: Booking objects whose BookingItems reference this item
+    new_bookings = db.session.query(Booking).join(BookingItem).filter(
+        BookingItem.item_id == item_id
+    ).all()
+    bookings = old_bookings + new_bookings
 
     booking_dates = get_bookings_list(item_id=item_id)
     booked_dates  = []
@@ -411,13 +506,13 @@ def item_details(item_id):
     item_for_cart = row2dict(item)
     booked_dates  = json.dumps(booked_dates_str)
 
-    if 'borrower_info' not in session:
-        borrower_info = False
+    borrower_info_session = session.get('borrower_info')
+    if borrower_info_session and borrower_info_session != {}:
+        borrower_info = json.dumps(borrower_info_session)
+    elif current_user.is_authenticated:
+        borrower_info = _borrower_info_for_user(current_user)
     else:
-        if session.get('borrower_info') == {}:
-            borrower_info = False
-        else:
-            borrower_info = json.dumps(session.get('borrower_info'))
+        borrower_info = False
 
     if request.args.get('flash') == 'select_items':
         flash("Select at least one item before booking.", "warning")
@@ -443,56 +538,65 @@ def check_all_items_availability():
     now   = datetime.now()
     availability = []
     for item in items:
-        if is_item_available(item.id,now, now):
+        if is_item_available(item.id, now, now):
             availability.append("Available")
         else:
-            # Get the overlapping bookings to extract status
-            overlapping_bookings = Booking.query.filter(
-                Booking.item_id == item.id,
-                db.or_(
-                    db.and_(Booking.borrow_date <= now, Booking.return_date >= now),
-                    db.and_(Booking.borrow_date >= now, Booking.return_date <= now)
-                )
-            ).all()
-
-            # Use first overlapping booking's status as the reason
-            if overlapping_bookings:
-                current_status = overlapping_bookings[0].status
-                availability.append(current_status.capitalize())  # e.g., "Booked" or "Lent"
+            status = None
+            now_overlap = db.or_(
+                db.and_(BookingItem.borrow_date <= now, BookingItem.return_date >= now),
+                db.and_(BookingItem.borrow_date >= now, BookingItem.return_date <= now),
+            )
+            bi = db.session.query(BookingItem).filter(
+                BookingItem.item_id == item.id, now_overlap
+            ).first()
+            if bi:
+                status = bi.booking.status
             else:
-                availability.append("Lent/booked")
+                old = Booking.query.filter(
+                    Booking.item_id == item.id,
+                    ~Booking.booking_items.any(),
+                    db.or_(
+                        db.and_(Booking.borrow_date <= now, Booking.return_date >= now),
+                        db.and_(Booking.borrow_date >= now, Booking.return_date <= now),
+                    ),
+                ).first()
+                if old:
+                    status = old.status
+            availability.append(status.capitalize() if status else "Lent/booked")
     return availability
 
 
 def is_item_available(item_id, start_date, end_date):
-    bookings = Booking.query.filter(
+    overlap = db.or_(
+        db.and_(BookingItem.borrow_date <= start_date, BookingItem.return_date >= start_date),
+        db.and_(BookingItem.borrow_date <= end_date,   BookingItem.return_date >= end_date),
+        db.and_(BookingItem.borrow_date >= start_date, BookingItem.return_date <= end_date),
+    )
+    # New-style: check BookingItem table
+    if db.session.query(BookingItem).filter(BookingItem.item_id == item_id, overlap).first():
+        return False
+    # Old-style: Booking without BookingItem children
+    old_overlap = db.or_(
+        db.and_(Booking.borrow_date <= start_date, Booking.return_date >= start_date),
+        db.and_(Booking.borrow_date <= end_date,   Booking.return_date >= end_date),
+        db.and_(Booking.borrow_date >= start_date, Booking.return_date <= end_date),
+    )
+    return Booking.query.filter(
         Booking.item_id == item_id,
-        db.or_(
-            db.and_(Booking.borrow_date <= start_date, Booking.return_date >= start_date),
-            db.and_(Booking.borrow_date <= end_date, Booking.return_date >= end_date),
-            db.and_(Booking.borrow_date >= start_date, Booking.return_date <= end_date)
-        )
-    ).all()
-    return len(bookings) == 0
+        ~Booking.booking_items.any(),
+        old_overlap,
+    ).first() is None
 
 
 def get_bookings_list(item_id):
-    """ Fetch all bookings from the database for this item"""
-    
-    bookings_query = Booking.query.filter_by(item_id=item_id).all()
-    
-    # Initialize an empty list to hold booking dictionaries
+    """Fetch all booking date ranges for this item (old-style and new-style)."""
     bookings_list = []
-    
-    # Iterate over the fetched bookings and add them to the list as dictionaries
-    for booking in bookings_query:
-        booking_dict = {
-            "borrow_date": booking.borrow_date,
-            "return_date": booking.return_date,
-            "borrower_name":booking.borrower_name
-        }
-        bookings_list.append(booking_dict)
-    
+    # Old-style: Booking directly on item, no BookingItem children
+    for b in Booking.query.filter(Booking.item_id == item_id, ~Booking.booking_items.any()).all():
+        bookings_list.append({"borrow_date": b.borrow_date, "return_date": b.return_date, "borrower_name": b.borrower_name})
+    # New-style: via BookingItem
+    for bi in BookingItem.query.filter_by(item_id=item_id).all():
+        bookings_list.append({"borrow_date": bi.borrow_date, "return_date": bi.return_date, "borrower_name": bi.booking.borrower_name})
     return bookings_list
 
 
@@ -510,85 +614,144 @@ def get_all_dates_between(start_date, end_date):
 @login_required
 def book():
     """
-    Main book function, for single and bulk booking
+    Main book function. Creates ONE Booking per cart session + one BookingItem per item.
     """
-
     if session.get("microsoft_user") and is_microsoft_token_expired():
         logout_user()
-
         pop_session()
-
         flash("Your session has expired. Please log in again.", "warning")
         return redirect(url_for('login'))
 
-    borrower_info   = session.get('borrower_info')[0]
-    borrower_name   = borrower_info["borrower_name"]
-    borrower_email  = borrower_info["borrower_email"]
-    borrower_phone  = borrower_info["borrower_phone"]
-
-    items           = request.form.get('itemsJSON')
-    booked_dates    = request.form.get('booked_dates')
-
-    # Filter the type, force list 
-    if isinstance(items, dict):
-        items_list = []
-        items.list.append(items)
-    elif isinstance(items, str):
-        items_list = json.loads(items)
+    borrower_info_list = session.get('borrower_info')
+    if borrower_info_list:
+        borrower_info  = borrower_info_list[0]
+        borrower_name  = borrower_info["borrower_name"]
+        borrower_email = borrower_info["borrower_email"]
+        borrower_phone = borrower_info["borrower_phone"]
     else:
-        items_list = items
-
-    booked_items = []
-
-    user_email = session.get('user_email', '')
-    print(user_email)
-    print("borrower_email: " + borrower_email)
-
-    for single_item in items_list:
-
-        item = Item.query.get_or_404(single_item["id"])
-
-        borrow_date     = datetime.strptime(single_item['borrow_date'], '%Y-%m-%d')
-        return_date     = datetime.strptime(single_item['return_date'], '%Y-%m-%d')
-
-        if is_item_available(item.id, borrow_date, return_date):
-
-            item.status = 'booked'
-
-            new_booking = Booking(  item_id         = item.id, 
-                                    item_name       = item.name,
-                                    borrower_name   = borrower_name, 
-                                    borrower_email  = borrower_email,
-                                    borrower_phone  = borrower_phone,
-                                    user_email      = user_email,
-                                    borrow_date     = borrow_date,
-                                    return_date     = return_date)
-
-            db.session.add(new_booking)
-            booked_items += [new_booking]
-
+        items_raw_fb = request.form.get('itemsJSON')
+        if items_raw_fb:
+            fb = json.loads(items_raw_fb)
+            if fb:
+                borrower_name  = fb[0].get('borrower_name', '')
+                borrower_email = fb[0].get('borrower_email', '')
+                borrower_phone = fb[0].get('borrower_phone', '')
+            else:
+                flash('Booking info missing. Please try again.', 'danger')
+                return redirect(url_for('home'))
         else:
-            flash(f'Selected dates are not available for booking.', 'danger')
-            return redirect(url_for('cart',items=items, booked_dates=booked_dates))
+            flash('Booking info missing. Please try again.', 'danger')
+            return redirect(url_for('home'))
+    user_email     = session.get('user_email', '')
+
+    items_raw  = request.form.get('itemsJSON')
+    if isinstance(items_raw, dict):
+        items_list = [items_raw]
+    elif isinstance(items_raw, str):
+        items_list = json.loads(items_raw)
+    else:
+        items_list = items_raw
+
+    note = items_list[0].get('note', '') if items_list else ''
+
+    # Validate all items before writing anything
+    for single_item in items_list:
+        item = Item.query.get_or_404(single_item["id"])
+        if item.is_bookable is False:
+            flash(f'{item.name} is not available for booking.', 'danger')
+            return redirect(url_for('cart'))
+        borrow_date = datetime.strptime(single_item['borrow_date'], '%Y-%m-%d')
+        return_date = datetime.strptime(single_item['return_date'], '%Y-%m-%d')
+        if return_date < borrow_date:
+            flash('Return date must be after borrow date.', 'danger')
+            return redirect(url_for('cart'))
+        if not is_item_available(item.id, borrow_date, return_date):
+            flash(f'Selected dates are not available for {item.name}.', 'danger')
+            return redirect(url_for('cart'))
+
+    # Create ONE Booking (first item used for backwards-compat fields)
+    first      = items_list[0]
+    first_item = Item.query.get(first['id'])
+    first_borrow = datetime.strptime(first['borrow_date'], '%Y-%m-%d')
+    first_return = datetime.strptime(first['return_date'], '%Y-%m-%d')
+
+    new_booking = Booking(
+        item_id        = first_item.id,
+        item_name      = first_item.name,
+        borrower_name  = borrower_name,
+        borrower_email = borrower_email,
+        borrower_phone = borrower_phone,
+        user_email     = user_email,
+        borrow_date    = first_borrow,
+        return_date    = first_return,
+        note           = note,
+    )
+    db.session.add(new_booking)
+    db.session.flush()  # get new_booking.id without committing
+
+    # Create one BookingItem per item
+    for single_item in items_list:
+        item        = Item.query.get(single_item["id"])
+        borrow_date = datetime.strptime(single_item['borrow_date'], '%Y-%m-%d')
+        return_date = datetime.strptime(single_item['return_date'], '%Y-%m-%d')
+        db.session.add(BookingItem(
+            booking_id  = new_booking.id,
+            item_id     = item.id,
+            item_name   = item.name,
+            borrow_date = borrow_date,
+            return_date = return_date,
+        ))
 
     db.session.commit()
 
-    # Send email and flash success message
-    response = send_email(  borrower_email= borrower_email,
-                            borrower_name = borrower_name,
-                            borrower_phone= borrower_phone,
-                            borrow_date   = borrow_date.date(),
-                            return_date   = return_date.date(),
-                            subject       = "Booking - Do Not Reply",
-                            text_content  = "",
-                            html_content  = "",
-                            items         = booked_items,
-                            type_of_mail  = 'booking',
-                            user_email    = user_email)
+    # 1. Send confirmation to borrower only
+    send_email(
+        borrower_email = borrower_email,
+        borrower_name  = borrower_name,
+        borrower_phone = borrower_phone,
+        borrow_date    = first_borrow.date(),
+        return_date    = first_return.date(),
+        subject        = "Booking - Do Not Reply",
+        text_content   = "",
+        html_content   = "",
+        items          = new_booking.booking_items,
+        type_of_mail   = 'booking',
+        user_email     = user_email,
+        recipients     = [{"name": borrower_name, "email": borrower_email}],
+    )
 
-    flash(f'All items booked successfully!', 'success')
-    session['cart'] = {}  # Clear the cart
-        
+    # 2. Send admin notification with Lend / Deny action links
+    DEV_ADMIN_CONTACTS  = [{"name": "Roberto", "email": "roberto.becerra@lmta.lt"}]
+    ALL_ADMIN_CONTACTS  = [
+        {"name": "Edvinas",       "email": "edvinas.siliunas@lmta.lt"},
+        {"name": "Edvinas Gmail", "email": "siliunas.edvinas@gmail.com"},
+        {"name": "Roberto",       "email": "roberto.becerra@lmta.lt"},
+        {"name": "Julius",        "email": "julius.aglinskas@lmta.lt"},
+        {"name": "Mantautas",     "email": "mantautas.krukauskas@lmta.lt"},
+    ]
+    admin_contacts = ALL_ADMIN_CONTACTS if not LOCALHOST else DEV_ADMIN_CONTACTS
+    lend_url = url_for('lend_item',   booking_id=new_booking.id, _external=True)
+    deny_url = url_for('deny_booking', booking_id=new_booking.id, _external=True)
+    send_email(
+        borrower_email = borrower_email,
+        borrower_name  = borrower_name,
+        borrower_phone = borrower_phone,
+        borrow_date    = first_borrow.date(),
+        return_date    = first_return.date(),
+        subject        = "New Booking Request - MISC",
+        text_content   = "",
+        html_content   = "",
+        items          = new_booking.booking_items,
+        type_of_mail   = 'booking_admin',
+        user_email     = user_email,
+        lend_url       = lend_url,
+        deny_url       = deny_url,
+        note           = note,
+        recipients     = admin_contacts,
+    )
+
+    flash('All items booked successfully!', 'success')
+    session['cart'] = {}
     return redirect(url_for('home'))
 
 
@@ -639,7 +802,7 @@ def bookings_list():
 
 
 @app.route('/book_cart', methods=['POST','GET'])
-# @login_required
+@login_required
 def book_cart():
     """
     Main "add to cart" function. For single or bulk addition 
@@ -648,10 +811,16 @@ def book_cart():
     borrower_name       = request.form.get("borrower_name")
     borrower_email      = request.form.get("borrower_email")
     borrower_phone      = request.form.get("borrower_phone")
-    items_json          = request.form.get('itemsJSON')
+    booking_note        = request.form.get("booking_note", "")
+    items_json = request.form.get('itemsJSON')
 
-    if items_json:
-        json_data = json.loads(items_json)
+    if not items_json:
+        flash('No items selected. Please try again.', 'danger')
+        return redirect(url_for('home'))
+    json_data = json.loads(items_json)
+    if not json_data:
+        flash('No items selected. Please try again.', 'danger')
+        return redirect(url_for('home'))
 
     # Set items to the session
     if 'cart' not in session:
@@ -672,15 +841,26 @@ def book_cart():
     session['borrower_info'] = borrower_info
 
     for item in json_data:
+        item_obj = Item.query.get(item['id'])
+        if item_obj and item_obj.is_bookable is False:
+            flash(f'{item_obj.name} is not available for booking.', 'danger')
+            return redirect(url_for('home'))
+
         # Convert dates from string to date objects if needed
-        borrow_date = datetime.strptime(item["borrow_date"], '%Y-%m-%d')
-        return_date = datetime.strptime(item["return_date"], '%Y-%m-%d')
+        borrow_date_str = item.get("borrow_date")
+        return_date_str = item.get("return_date")
+        if not borrow_date_str or not return_date_str:
+            flash('Please select borrow and return dates for all items.', 'danger')
+            return redirect(url_for('home'))
+        borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d')
+        return_date = datetime.strptime(return_date_str, '%Y-%m-%d')
 
         # Append to our cart_items list
         cart_items.append({
             "borrower_name"     : borrower_name,
             "borrower_email"    : borrower_email,
             "borrower_phone"    : borrower_phone,
+            "note"              : booking_note,
             "id"                : item['id'],
             "name"              : item['name'],
             "location"          : item['location'],
@@ -690,16 +870,12 @@ def book_cart():
 
     # Save to session (as JSON)
     session['cart'] = cart_items
+    session.modified = True
 
     flash("Successfully added to cart", 'success' )
 
-    return redirect(url_for('home'))
+    return redirect(url_for('cart'))
 
-
-# Bulk delete. TODO:implement, inactive as of now
-@app.route('/delete_bulk', methods=['POST','GET'])
-def delete_bulk():
-    pass
 
 
 def model_to_dict(model_instance):
@@ -713,6 +889,7 @@ def model_to_dict(model_instance):
 
 
 @app.route('/cart')
+@login_required
 def cart():
     """ Display cart page"""
 
@@ -755,48 +932,57 @@ def cart():
 
     items_for_cart = items_with_booking_info
 
-    if 'borrower_info' not in session:
-        borrower_info = False
+    borrower_info_session = session.get('borrower_info')
+    if borrower_info_session and borrower_info_session != {}:
+        borrower_info = json.dumps(borrower_info_session)
+    elif current_user.is_authenticated:
+        borrower_info = _borrower_info_for_user(current_user)
     else:
-        if session.get('borrower_info') == {}:
-            borrower_info = False
-        else:
-            borrower_info = json.dumps(session.get('borrower_info'))
+        borrower_info = False
 
     return render_template('cart.html', items=items_with_booking_info, items_for_cart = items_for_cart, borrower_info=borrower_info, booked_dates=all_booking_dates)
 
 
 @app.route('/remove_from_cart/<item_id>', methods=['GET', 'POST'])
+@login_required
 def remove_from_cart(item_id):
-    
-    cart = session.get('cart', {})
+    cart = session.get('cart', [])
 
-    # Check if we should remove a single item or clear the entire cart
     if item_id == 'all':
-        session['cart'] = {}  # Clear the cart
+        session['cart'] = {}
         flash('Cart emptied successfully', 'success')
-    elif (int(item_id)-1) <= len(cart):
-        del cart[int(item_id)-1]
-        session['cart'] = cart
-        flash('Item removed from cart successfully', 'success')
     else:
-        flash('Item not found in cart', 'error')
+        new_cart = [item for item in cart if str(item.get('id')) != str(item_id)]
+        if len(new_cart) < len(cart):
+            session['cart'] = new_cart
+            flash('Item removed from cart successfully', 'success')
+        else:
+            flash('Item not found in cart', 'error')
 
-    # Redirect back to the cart page
     return redirect(url_for('cart'))
 
 
 @app.route('/lend/<int:booking_id>')
 @admin_required
 def lend_item(booking_id):
-    if not current_user.is_admin:
-        flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('dashboard'))
-
     booking = Booking.query.get_or_404(booking_id)
     booking.status = 'lent'
     db.session.commit()
-    
+
+    items_for_email = booking.booking_items if booking.booking_items else [booking]
+    send_email(
+        borrower_email = booking.borrower_email,
+        borrower_name  = booking.borrower_name,
+        borrower_phone = booking.borrower_phone,
+        borrow_date    = booking.borrow_date.date(),
+        return_date    = booking.return_date.date(),
+        subject        = "Booking approved and collected — Do Not Reply",
+        text_content   = "",
+        html_content   = "",
+        items          = items_for_email,
+        type_of_mail   = 'lent',
+    )
+
     flash(f'Item {booking.item_name} marked as lent!', 'success')
     return redirect(request.referrer or url_for('home'))
 
@@ -804,115 +990,227 @@ def lend_item(booking_id):
 @app.route('/return/<int:booking_id>', methods=['POST', 'GET'])
 @admin_required
 def return_item(booking_id):
-
-    if not current_user.is_admin:
-        flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('dashboard'))
-
     booking = Booking.query.get_or_404(booking_id)
-    name_of_deleted_item = booking.item_name
+
+    # Capture all needed data before the booking is deleted from the DB
+    saved_email     = booking.borrower_email
+    saved_name      = booking.borrower_name
+    saved_phone     = booking.borrower_phone
+    saved_borrow    = booking.borrow_date.date()
+    saved_return    = booking.return_date.date()
+    saved_item_name = booking.item_name
+
+    # Capture email items before cascade-delete removes BookingItems
+    if booking.booking_items:
+        items_for_email = [
+            SimpleNamespace(
+                item_name   = bi.item_name,
+                borrow_date = bi.borrow_date,
+                return_date = bi.return_date,
+            )
+            for bi in booking.booking_items
+        ]
+    else:
+        items_for_email = [booking]  # old-style; SQLAlchemy keeps in-memory attrs
+
+    actionType = request.form.get("formAction")
+    note       = request.form.get('note')
+
     db.session.delete(booking)
     db.session.commit()
-    
-    flash(f'Item {name_of_deleted_item} marked as returned!', 'success')
 
-    # Send email
-    actionType  = request.form.get("formAction")
-    note        = request.form.get('note')
-    if (actionType == 'deny'):
-        response = send_email(  borrower_email= booking.borrower_email,
-                                borrower_name = booking.borrower_name,
-                                borrower_phone= booking.borrower_phone,
-                                borrow_date   = booking.borrow_date.date(),
-                                return_date   = booking.return_date.date(),
-                                subject       = "Booking denied - Do Not Reply",
-                                text_content  = "",
-                                html_content  = "",
-                                items         = [booking],
-                                type_of_mail  = 'deny',
-                                note          = note)
+    if actionType in ('deny', 'deny_no_note'):
+        flash(f'Booking for {saved_item_name} denied.', 'success')
+    else:
+        flash(f'Item {saved_item_name} marked as returned!', 'success')
 
-    return redirect(request.referrer)
+    if actionType == 'deny':
+        send_email(
+            borrower_email = saved_email,
+            borrower_name  = saved_name,
+            borrower_phone = saved_phone,
+            borrow_date    = saved_borrow,
+            return_date    = saved_return,
+            subject        = "Booking denied — Do Not Reply",
+            text_content   = "",
+            html_content   = "",
+            items          = items_for_email,
+            type_of_mail   = 'deny',
+            note           = note,
+        )
+    elif actionType == 'deny_no_note':
+        pass  # booking deleted silently; no email sent
+    else:
+        send_email(
+            borrower_email = saved_email,
+            borrower_name  = saved_name,
+            borrower_phone = saved_phone,
+            borrow_date    = saved_borrow,
+            return_date    = saved_return,
+            subject        = "Item returned — Thank you — Do Not Reply",
+            text_content   = "",
+            html_content   = "",
+            items          = items_for_email,
+            type_of_mail   = 'returned',
+        )
+
+    if actionType in ('deny', 'deny_no_note'):
+        return redirect(url_for('admin_dashboard', section='bookings'))
+    return redirect(request.referrer or url_for('home'))
 
 
 @app.route('/add_item', methods=['GET', 'POST'])
-@admin_required 
+@admin_required
 def add_item():
-    if not current_user.is_admin:
-        flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('dashboard'))
-
     if request.method == 'POST':
-        name = request.form.get('name')
-        location = request.form.get('location')
-        new_item = Item(name=name, location=location)
+        name        = request.form.get('name')
+        location    = request.form.get('location')
+        is_bookable = 'is_bookable' in request.form
+        new_item = Item(name=name, location=location, is_bookable=is_bookable)
         db.session.add(new_item)
         db.session.commit()
         flash(f'Item {name} added successfully!', 'success')
-        return redirect(url_for('home'))
+        next_url = request.form.get('next') or url_for('home')
+        return redirect(next_url)
 
-    return render_template('add_item.html')
+    locations = Location.query.order_by(Location.name).all()
+    return render_template('add_item.html', locations=locations)
 
 
 @app.route('/edit_item/<int:item_id>', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_item(item_id):
-    
-    if not current_user.is_admin:
-        flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('dashboard'))
-
     if request.method == 'GET':
         item = Item.query.get_or_404(item_id)
-        return render_template('edit_item.html', item=item)
+        locations = Location.query.order_by(Location.name).all()
+        return render_template('edit_item.html', item=item, locations=locations)
 
     if request.method == 'POST':
         name        = request.form.get('name')
         location    = request.form.get('location')
-        
         existing_item = Item.query.get(item_id)
-        
-        existing_item.name      = name 
-        existing_item.location  = location 
-
+        existing_item.name        = name
+        existing_item.location    = location
+        existing_item.is_bookable = 'is_bookable' in request.form
         db.session.commit()
-
         flash(f'Item {name} edited successfully!', 'success')
-        return redirect(url_for('home'))
+        next_url = request.form.get('next') or url_for('home')
+        return redirect(next_url)
 
-    return render_template('add_item.html')
 
-
-@app.route('/delete_item/<int:item_id>', methods=['GET', 'POST'])
-@login_required
+@app.route('/delete_item/<int:item_id>', methods=['POST'])
+@admin_required
 def delete_item(item_id):
-    if not current_user.is_admin:
-        flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('home'))
+    item = Item.query.get_or_404(item_id)
+    name = item.name
+    db.session.delete(item)
+    db.session.commit()
+    flash(f'Item {name} deleted successfully!', 'success')
+    next_url = request.form.get('next') or url_for('home')
+    return redirect(next_url)
 
-    if request.method == 'GET':
-        item = Item.query.get_or_404(item_id)
-        name = item.name
-        Item.query.filter_by(id=item_id).delete()
+
+@app.route('/locations')
+@admin_required
+def locations():
+    all_locations = Location.query.order_by(Location.name).all()
+    return render_template('locations.html', locations=all_locations)
+
+
+@app.route('/add_location', methods=['POST'])
+@admin_required
+def add_location():
+    name = request.form.get('name', '').strip()
+    next_url = request.form.get('next') or url_for('locations')
+    if name:
+        if not Location.query.filter_by(name=name).first():
+            db.session.add(Location(name=name))
+            db.session.commit()
+            flash(f'Location "{name}" added.', 'success')
+        else:
+            flash(f'Location "{name}" already exists.', 'warning')
+    return redirect(next_url)
+
+
+@app.route('/delete_location/<int:location_id>', methods=['POST'])
+@admin_required
+def delete_location(location_id):
+    loc = Location.query.get_or_404(location_id)
+    next_url = request.form.get('next') or url_for('locations')
+    if Item.query.filter_by(location=loc.name).first():
+        flash(f'Cannot delete "{loc.name}": items reference it.', 'danger')
+    else:
+        db.session.delete(loc)
         db.session.commit()
-        flash(f'Item {name} deleted successfully!', 'success')
-        return redirect(url_for('home'))
+        flash(f'Location "{loc.name}" deleted.', 'success')
+    return redirect(next_url)
 
-    return redirect(url_for('home'))
+
+@app.route('/edit_location/<int:location_id>', methods=['POST'])
+@admin_required
+def edit_location(location_id):
+    loc = Location.query.get_or_404(location_id)
+    name = request.form.get('name', '').strip()
+    next_url = request.form.get('next') or url_for('locations')
+    if not name:
+        flash('Location name cannot be empty.', 'danger')
+    elif Location.query.filter(Location.name == name, Location.id != location_id).first():
+        flash(f'Location "{name}" already exists.', 'warning')
+    else:
+        loc.name = name
+        db.session.commit()
+        flash(f'Location renamed to "{name}".', 'success')
+    return redirect(next_url)
+
+
+@app.route('/bookings_admin')
+@admin_required
+def bookings_admin():
+    bookings = Booking.query.order_by(Booking.id.desc()).all()
+    return render_template('bookings_admin.html', bookings=bookings)
+
+
+@app.route('/booking_detail_json/<int:booking_id>')
+@admin_required
+def booking_detail_json(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    if booking.booking_items:
+        items = [
+            {
+                "item_name":   bi.item_name,
+                "borrow_date": bi.borrow_date.strftime('%Y-%m-%d'),
+                "return_date": bi.return_date.strftime('%Y-%m-%d'),
+                "item_id":     bi.item_id,
+            }
+            for bi in booking.booking_items
+        ]
+    else:
+        items = [{
+            "item_name":   booking.item_name,
+            "borrow_date": booking.borrow_date.strftime('%Y-%m-%d'),
+            "return_date": booking.return_date.strftime('%Y-%m-%d'),
+            "item_id":     booking.item_id,
+        }]
+    return jsonify({
+        "id":             booking.id,
+        "borrower_name":  booking.borrower_name,
+        "borrower_email": booking.borrower_email,
+        "borrower_phone": booking.borrower_phone,
+        "note":           booking.note or '',
+        "status":         booking.status,
+        "items":          items,
+        "lend_url":       url_for('lend_item',   booking_id=booking.id),
+        "return_url":     url_for('return_item', booking_id=booking.id),
+    })
 
 
 @app.route('/test-job')
 @admin_required
 def test_job():
     """
-    Visit this route to execute the daily check 
+    Visit this route to execute the daily check
     for items due to return.
     """
-    
-    if not current_user.is_admin:
-        flash('Permission denied. You do not have admin privileges.', 'danger')
-        return redirect(url_for('home'))
-
     with app.app_context():
         check_and_send_reminders_tomorrow()
     return "Job executed", 200
@@ -932,7 +1230,7 @@ def check_and_send_reminders_tomorrow():
         # Group bookings and items by borrower
         borrower_data = defaultdict(lambda: {'bookings': [], 'items': []})
         for booking in due_bookings:
-            key = (booking.borrower_email, booking.borrower_name)
+            key = (booking.borrower_email, booking.borrower_name, booking.borrower_phone)
             borrower_data[key]['bookings'].append(booking)
             borrower_data[key]['items'].append(booking.item)
 
@@ -951,13 +1249,13 @@ def check_and_send_reminders_tomorrow():
                                     type_of_mail  = 'return_reminder')
 
             # Log the execution of the function
-            logger.info('check_and_send_reminders_tomorrow executed. Email sent to: ' + email)
+            logger.info('check_and_send_reminders_tomorrow executed. Email sent to: ' + borrower_email)
 
         # Log additional details if needed, such as user info, email contents, etc.
         logger.info(f'Sending reminders finished.')
 
 
-def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, return_date, subject, text_content, html_content, items, type_of_mail=None, **kargs):
+def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, return_date, subject, text_content, html_content, items, type_of_mail=None, recipients=None, **kargs):
     mail_body = {}
     
     logger.info(f"Attempting to email {borrower_email} for {type_of_mail}")
@@ -985,10 +1283,24 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
                                     now             = datetime.now(),
                                     items           = items)
 
+    elif type_of_mail == 'booking_admin':
+        plain_text_content = "A new booking request has been submitted."
+        html_content = render_template('email_booking_admin.html',
+                                    borrower_name   = borrower_name,
+                                    borrower_email  = borrower_email,
+                                    borrower_phone  = borrower_phone,
+                                    borrow_date     = borrow_date,
+                                    return_date     = return_date,
+                                    now             = datetime.now(),
+                                    items           = items,
+                                    lend_url        = kargs.get('lend_url', ''),
+                                    deny_url        = kargs.get('deny_url', ''),
+                                    note            = kargs.get('note', ''))
+
     elif type_of_mail == 'deny':
         plain_text_content = "Your booking has been denied."
-        html_content = render_template('email_deny.html', 
-                                    borrower_name   = borrower_name, 
+        html_content = render_template('email_deny.html',
+                                    borrower_name   = borrower_name,
                                     borrower_email  = borrower_email,
                                     borrower_phone  = borrower_phone,
                                     borrow_date     = borrow_date,
@@ -996,7 +1308,29 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
                                     now             = datetime.now(),
                                     bookings        = items,
                                     note            = kargs['note'])
-    
+
+    elif type_of_mail == 'lent':
+        plain_text_content = "Your item(s) have been approved and handed over. Please return them by the agreed date."
+        html_content = render_template('email_lent.html',
+                                    borrower_name   = borrower_name,
+                                    borrower_email  = borrower_email,
+                                    borrower_phone  = borrower_phone,
+                                    borrow_date     = borrow_date,
+                                    return_date     = return_date,
+                                    now             = datetime.now(),
+                                    items           = items)
+
+    elif type_of_mail == 'returned':
+        plain_text_content = "Your item(s) have been logged as returned. Thank you."
+        html_content = render_template('email_returned.html',
+                                    borrower_name   = borrower_name,
+                                    borrower_email  = borrower_email,
+                                    borrower_phone  = borrower_phone,
+                                    borrow_date     = borrow_date,
+                                    return_date     = return_date,
+                                    now             = datetime.now(),
+                                    items           = items)
+
     mail_from = "booking@ideas-block.com"
     name_from = "MISC booking - DO NOT Reply"
 
@@ -1015,22 +1349,26 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
     # Filter admins based on environment
     admin_contacts = ALL_ADMIN_CONTACTS if not LOCALHOST else DEV_ADMIN_CONTACTS
 
-    # Build BCC list while avoiding duplicates
-    borrower_email_lower = borrower_email.lower()
-    admin_emails_set = {admin["email"].lower() for admin in admin_contacts}
-    bcc = list(admin_contacts)
-
-    # Add borrower if not already an admin
-    if borrower_email_lower not in admin_emails_set:
-        bcc.append({"name": borrower_name, "email": borrower_email_lower})
-
-    # TODO: If return reminder, send only to borrower. Keep this logic?
-    if type_of_mail == 'booking' or type_of_mail == 'deny':
-        # mailer.set_bcc_recipients(bcc, mail_body)
-        pass
+    if recipients is not None:
+        # Caller supplied explicit recipient list — use it directly
+        bcc = recipients
     else:
-        bcc = []
-        bcc.append({ "name": borrower_name, "email": borrower_email_lower})
+        # Build BCC list while avoiding duplicates
+        borrower_email_lower = borrower_email.lower()
+        admin_emails_set = {admin["email"].lower() for admin in admin_contacts}
+        bcc = list(admin_contacts)
+
+        # Add borrower if not already an admin
+        if borrower_email_lower not in admin_emails_set:
+            bcc.append({"name": borrower_name, "email": borrower_email_lower})
+
+        # TODO: If return reminder, send only to borrower. Keep this logic?
+        if type_of_mail == 'booking' or type_of_mail == 'deny':
+            # mailer.set_bcc_recipients(bcc, mail_body)
+            pass
+        else:
+            bcc = []
+            bcc.append({ "name": borrower_name, "email": borrower_email.lower()})
 
     request = (IdentityBuilder()
           .identity_id("MISC")
@@ -1054,6 +1392,170 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
     response = mailer.emails.send(email)
     return response
 
+
+# ---------------------------------------------------------------------------
+# Admin dashboard
+# ---------------------------------------------------------------------------
+
+@app.route('/admin_dashboard')
+@admin_required
+def admin_dashboard():
+    section = request.args.get('section', 'bookings')
+    data = {'section': section}
+    if section == 'bookings':
+        data['bookings'] = Booking.query.order_by(Booking.id.desc()).all()
+    elif section == 'users':
+        data['users'] = User.query.order_by(User.username).all()
+    elif section == 'locations':
+        data['locations'] = Location.query.order_by(Location.name).all()
+    elif section == 'programmes':
+        data['programmes'] = Programme.query.order_by(Programme.name).all()
+    elif section == 'items':
+        data['items'] = Item.query.order_by(Item.name).all()
+        data['locations'] = Location.query.order_by(Location.name).all()
+    return render_template('admin_dashboard.html', **data)
+
+
+@app.route('/admin/add_user', methods=['POST'])
+@admin_required
+def admin_add_user():
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+    is_admin = bool(request.form.get('is_admin'))
+    if not username or not password:
+        flash('Username and password are required.', 'danger')
+    elif User.query.filter_by(username=username).first():
+        flash(f'User "{username}" already exists.', 'warning')
+    else:
+        user = User(
+            username   = username,
+            email      = username,
+            password   = generate_password_hash(password, method='pbkdf2:sha256'),
+            is_admin   = is_admin,
+        )
+        db.session.add(user)
+        db.session.commit()
+        flash(f'User "{username}" added.', 'success')
+    return redirect(url_for('admin_dashboard', section='users'))
+
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('You cannot delete your own account.', 'danger')
+    else:
+        db.session.delete(user)
+        db.session.commit()
+        flash(f'User "{user.username}" deleted.', 'success')
+    return redirect(url_for('admin_dashboard', section='users'))
+
+
+@app.route('/admin/toggle_admin/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_toggle_admin(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('You cannot change your own admin status.', 'danger')
+    else:
+        user.is_admin = not user.is_admin
+        db.session.commit()
+        flash(f'Admin status for "{user.username}" {"enabled" if user.is_admin else "disabled"}.', 'success')
+    return redirect(url_for('admin_dashboard', section='users'))
+
+
+@app.route('/admin/add_programme', methods=['POST'])
+@admin_required
+def admin_add_programme():
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Programme name cannot be empty.', 'danger')
+    elif Programme.query.filter_by(name=name).first():
+        flash(f'Programme "{name}" already exists.', 'warning')
+    else:
+        db.session.add(Programme(name=name))
+        db.session.commit()
+        flash(f'Programme "{name}" added.', 'success')
+    return redirect(url_for('admin_dashboard', section='programmes'))
+
+
+@app.route('/admin/delete_programme/<int:programme_id>', methods=['POST'])
+@admin_required
+def admin_delete_programme(programme_id):
+    prog = Programme.query.get_or_404(programme_id)
+    db.session.delete(prog)
+    db.session.commit()
+    flash(f'Programme "{prog.name}" deleted.', 'success')
+    return redirect(url_for('admin_dashboard', section='programmes'))
+
+
+@app.route('/admin/edit_programme/<int:programme_id>', methods=['POST'])
+@admin_required
+def admin_edit_programme(programme_id):
+    prog = Programme.query.get_or_404(programme_id)
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Programme name cannot be empty.', 'danger')
+    elif Programme.query.filter(Programme.name == name, Programme.id != programme_id).first():
+        flash(f'Programme "{name}" already exists.', 'warning')
+    else:
+        prog.name = name
+        db.session.commit()
+        flash(f'Programme renamed to "{name}".', 'success')
+    return redirect(url_for('admin_dashboard', section='programmes'))
+
+
+@app.route('/deny_booking/<int:booking_id>')
+@admin_required
+def deny_booking(booking_id):
+    booking = Booking.query.get_or_404(booking_id)
+    return render_template('deny_booking.html', booking=booking)
+
+
+# ---------------------------------------------------------------------------
+# User profile
+# ---------------------------------------------------------------------------
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    if request.method == 'POST':
+        current_user.first_name = request.form.get('first_name', '').strip() or None
+        current_user.last_name  = request.form.get('last_name',  '').strip() or None
+        current_user.phone      = request.form.get('phone',      '').strip() or None
+        current_user.course     = request.form.get('course',     '').strip() or None
+        db.session.commit()
+        flash('Profile updated.', 'success')
+        return redirect(url_for('profile'))
+    programmes = Programme.query.order_by(Programme.name).all()
+    bookings   = Booking.query.filter_by(user_email=current_user.email).order_by(Booking.id.desc()).all()
+    return render_template('profile.html', programmes=programmes, bookings=bookings)
+
+
+# ---------------------------------------------------------------------------
+# Error handlers
+# ---------------------------------------------------------------------------
+
+@app.errorhandler(403)
+def forbidden(e):
+    return render_template('error.html', code=403, title='Forbidden',
+                           message='You do not have permission to access this page.'), 403
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('error.html', code=404, title='Page Not Found',
+                           message='The page you are looking for does not exist.'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('error.html', code=500, title='Server Error',
+                           message='Something went wrong on our end. Please try again later.'), 500
+
+# @app.route('/session-dump')
+# def session_dump():
+#     return jsonify(dict(session))
+
 if not LOCALHOST:
     scheduler.add_job(func=check_and_send_reminders_tomorrow, trigger="cron", hour=22, minute=22)
     scheduler.start()
@@ -1066,12 +1568,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.dev:
-        LOCALHOST = True
+        LOCALHOST = True  # Only affects app.run() below; for gunicorn use MISC_DEV=true env var
     else:
         LOCALHOST = False
 
-    # TODO: Why is this here?
-    create_admin_user()  # Call the function to create admin user
+    create_admin_user()
+    create_default_locations()
+    create_default_programmes()
 
     if not LOCALHOST:
 
@@ -1084,5 +1587,5 @@ if __name__ == '__main__':
 
     else:
         # Using 127.0.0.1 instead of 0.0.0.0 to avoid port overlap with airPlay
-        app.run(debug=True, host='0.0.0.0', port=5001, use_reloader=True)
+        app.run(debug=True, host='0.0.0.0', port=5006, use_reloader=True)
     

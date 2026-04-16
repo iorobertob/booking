@@ -1,68 +1,77 @@
+/* ─── Base ───────────────────────────────────────────────────────────────── */
 .dataTables_filter {
     margin-bottom: 20px;
 }
 
-a{
+a {
     text-decoration: none;
 }
+
 .header {
     display: flex;
     align-items: center;
 }
 .header img {
-    max-height: 60px; /* Adjust the size of the logo */
-    margin-right: 15px; /* Spacing between logo and title */
+    max-height: 60px;
+    margin-right: 15px;
 }
 .header h1 {
-    margin: 0; /* Removes default margin */
-    flex-grow: 1; /* Allows title to take the remaining width */
+    margin: 0;
+    flex-grow: 1;
 }
 
 hr {
-  border: none;
-  height: 0.2px;
-  /* Set the hr color */
-  color: #333;  /* old IE */
-  background-color: #333;  /* Modern Browsers */
+    border: none;
+    height: 0.2px;
+    color: #333;
+    background-color: #333;
 }
 
+/* ─── Body — light mode gradient ─────────────────────────────────────────── */
 body {
     font-family: 'Trebuchet MS', sans-serif;
-/*    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;*/
     margin: 0;
     padding: 0;
-    background-color: #f4f4f4;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 40%, #b3c5e8 100%);
+    background-attachment: fixed;
     color: #333;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
 }
-body.dialogs {
-    display: flex;
-}
+
+/* ─── Glass container ─────────────────────────────────────────────────────── */
 .container {
-    width: 80%;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.12);
+    padding: 20px;
     margin: 20px auto;
-    background-color: #fff;
-    padding: 20px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
+
+/* ─── Glass form ──────────────────────────────────────────────────────────── */
 form {
-    background-color: #fff;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(31, 38, 135, 0.08);
     padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
+
 h1 {
     color: #2c3e50;
-    text-align: center;
     margin-bottom: 20px;
 }
+
 label {
     font-weight: bold;
     display: block;
     margin-top: 10px;
 }
+
 input[type="text"],
 input[type="date"],
 input[type="email"],
@@ -72,133 +81,144 @@ input[type="tel"] {
     margin-top: 5px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    box-sizing: border-box; /* Fixes padding issue */
+    box-sizing: border-box;
 }
+
 button.booking {
     background-color: #34495e;
     color: white;
     padding: 10px 15px;
-    border: none;
+    border: none !important;
     border-radius: 4px;
     cursor: pointer;
     margin-top: 20px;
     width: 100%;
-    border: none !important;
 }
+
 button:hover {
     background-color: #2c3e50;
 }
+
+/* ─── Tables ──────────────────────────────────────────────────────────────── */
 table {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 20px;
 }
+
 th, td {
     border: 1px solid #ddd;
     padding: 8px;
     text-align: left;
 }
+
 th {
-    background-color: #34495e;
+    background: rgba(52, 73, 94, 0.82);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     color: white;
 }
+
 tr:nth-child(even) {
-    background-color: #ecf0f1;
+    background: rgba(52, 73, 94, 0.04);
 }
+
+/* ─── Links ───────────────────────────────────────────────────────────────── */
 a {
     color: #2980b9;
     text-decoration: none;
 }
-a:hover {
-/*    text-decoration: underline;*/
-}
 
+/* ─── Alerts ──────────────────────────────────────────────────────────────── */
 .alert {
-  padding: 12px;
-  border-radius: 3px;
-  font-size: 1.2rem;
-  margin-bottom: 16px;
-  border-width: 2px;
-  border-style: solid;
-  border-width: thin;
+    padding: 12px;
+    border-radius: 3px;
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+    border-style: solid;
+    border-width: thin;
 }
 
 .alert-error {
-  border-color: darkred;
-  background-color: red;
-  color: white;
-  border-width: thin;
+    border-color: darkred;
+    background-color: red;
+    color: white;
 }
+
 .alert-danger {
-  border-color: darkred;
-  background-color: darkred;
-  color: white;
-  border-width: thin;
+    border-color: darkred;
+    background-color: darkred;
+    color: white;
 }
 
 .alert-info {
-  border-color: orange;
-  background-color: yellow;
-  color: white;
-  border-width: thin;
+    border-color: orange;
+    background-color: yellow;
+    color: white;
 }
+
 .alert-success {
-  border-color: green;
-  background-color: lightgreen;
-  color: white;
-  border-width: thin;
+    border-color: green;
+    background-color: lightgreen;
+    color: white;
 }
 
-/* Responsive FullCalendar adjustments */
+/* ─── Modals — glass ──────────────────────────────────────────────────────── */
+.modal-content {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 16px;
+}
+
+/* ─── FullCalendar responsive ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .fc-toolbar {
-    flex-wrap: wrap;
-    justify-content: center !important;
-  }
+    .fc-toolbar {
+        flex-wrap: wrap;
+        justify-content: center !important;
+    }
 
-  .fc-toolbar-title {
-    font-size: 1.1rem !important;
-  }
+    .fc-toolbar-title {
+        font-size: 1.1rem !important;
+    }
 
-  .fc-button {
-    font-size: 0.8rem !important;
-    padding: 0.25rem 0.5rem !important;
-    height: auto !important;
-  }
+    .fc-button {
+        font-size: 0.8rem !important;
+        padding: 0.25rem 0.5rem !important;
+        height: auto !important;
+    }
 
-  .fc .fc-col-header-cell-cushion {
-    font-size: 0.75rem !important;
-    padding: 2px 4px !important;
-  }
+    .fc .fc-col-header-cell-cushion {
+        font-size: 0.75rem !important;
+        padding: 2px 4px !important;
+    }
 
-  .fc-daygrid-day-number {
-    font-size: 0.8rem !important;
-  }
+    .fc-daygrid-day-number {
+        font-size: 0.8rem !important;
+    }
 
-  .fc-daygrid-event {
-    font-size: 0.75rem !important;
-  }
+    .fc-daygrid-event {
+        font-size: 0.75rem !important;
+    }
 }
 
-/* Highlighted drag mirror */
 .fc-highlight {
-  background: rgba(0, 123, 255, 0.6) !important; /* light blue overlay */
-  border-radius: 4px;
-  transition: background 0.1s ease-in-out;
+    background: rgba(0, 123, 255, 0.6) !important;
+    border-radius: 4px;
+    transition: background 0.1s ease-in-out;
 }
 
 .fc-long-pressing {
-  cursor: grabbing;
-  opacity: 0.95;
-  background-color: rgba(0,0,0,0.02);
+    cursor: grabbing;
+    opacity: 0.95;
+    background-color: rgba(0, 0, 0, 0.02);
 }
 
 #calendar {
-  max-height: 80vh;
-  overflow-y: auto;
-  touch-action: pan-y;
-}
-#calendar {
+    max-height: 80vh;
+    overflow-y: auto;
+    touch-action: pan-y;
     min-height: 400px;
     max-width: 100%;
     overflow-x: auto;
@@ -209,24 +229,132 @@ a:hover {
     overflow-x: auto;
     display: block;
 }
-/*#bookingTable  {
-    width: 100% !important;
-    overflow-x: auto;
-    display: block;
-}*/
 
 @media (max-width: 768px) {
-  .dataTables_paginate .paginate_button {
-    font-size: 0.8rem;
-    padding: 0.25rem 0.5rem;
-  }
+    .dataTables_paginate .paginate_button {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
 }
 
 td.clickable-cell {
-  cursor: pointer;
-  transition: transform 0.1s ease;
+    cursor: pointer;
+    transition: transform 0.1s ease;
 }
+
 td.clickable-cell:hover {
-  transform: scale(1.015);
-  background-color: #f5f5f5;
+    transform: scale(1.015);
+    background-color: rgba(245, 245, 245, 0.8);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DARK MODE — [data-bs-theme="dark"]
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-bs-theme="dark"] body {
+    background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+    background-attachment: fixed;
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .container {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+[data-bs-theme="dark"] form {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+[data-bs-theme="dark"] h1,
+[data-bs-theme="dark"] h2,
+[data-bs-theme="dark"] h3 {
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] label {
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] td {
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-bs-theme="dark"] th {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+[data-bs-theme="dark"] tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+[data-bs-theme="dark"] a {
+    color: #93c5fd;
+}
+
+[data-bs-theme="dark"] hr {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Dark modals ─────────────────────────────────────────────────────────── */
+[data-bs-theme="dark"] .modal-content {
+    background: rgba(20, 20, 50, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .modal-header,
+[data-bs-theme="dark"] .modal-footer {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── DataTables dark mode ────────────────────────────────────────────────── */
+[data-bs-theme="dark"] .dataTables_wrapper,
+[data-bs-theme="dark"] .dataTables_info,
+[data-bs-theme="dark"] .dataTables_paginate {
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] table.dataTable tbody td {
+    color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] table.dataTable tbody tr:hover {
+    background: rgba(255, 255, 255, 0.07) !important;
+}
+
+[data-bs-theme="dark"] .dataTables_filter input,
+[data-bs-theme="dark"] .dataTables_length select {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+[data-bs-theme="dark"] .dataTables_paginate .paginate_button {
+    color: #cbd5e1 !important;
+}
+
+[data-bs-theme="dark"] .dataTables_paginate .paginate_button.current,
+[data-bs-theme="dark"] .dataTables_paginate .paginate_button:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    color: #fff !important;
+}
+
+[data-bs-theme="dark"] td.clickable-cell:hover {
+    background-color: rgba(255, 255, 255, 0.08);
 }

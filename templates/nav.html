@@ -1,44 +1,76 @@
-{% block stylesheets %} 
+{% block stylesheets %}
 <link href="{{ url_for('static', filename='css/nav.css') }}" rel="stylesheet">
 {% endblock %}
 
-<nav class="navbar navbar-expand-lg navbar-dark ">
+<nav class="navbar navbar-expand-lg navbar-dark">
     <div class="container-fluid">
-        <!-- Hamburger Menu Toggle Button -->
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-
         <a class="navbar-brand" href="{{ url_for('home') }}">
             <img class="image-brand" src="{{ url_for('static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 30px;">MISC's Booking System
         </a>
 
+        <!-- Hamburger Menu Toggle Button -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
-            
-            <ul class="navbar-nav ml-auto">
+            <ul class="navbar-nav ms-auto">
                 <li class="nav-item">
-                        <a class="btn btn-outline-primary" href="{{ url_for('cart') }}">Cart</a>
-                    </li>&nbsp;
+                    <a class="btn btn-outline-light" href="{{ url_for('cart') }}">Cart</a>
+                </li>&nbsp;
+
                 {% if current_user.is_authenticated %}
                     {% if current_user.is_admin %}
                         <li class="nav-item">
-                            <a class="btn btn-outline-primary" href="{{ url_for('bookings_list') }}">Bookings</a>
+                            <a class="btn btn-outline-light" href="{{ url_for('admin_dashboard') }}">Admin</a>
                         </li>&nbsp;
                     {% endif %}
                     <li class="nav-item">
-                        <a class="btn btn-outline-primary" href="{{ url_for('logout') }}">Logout</a>
+                        <a class="btn btn-outline-light" href="{{ url_for('profile') }}">My Profile</a>
+                    </li>&nbsp;
+                    <li class="nav-item">
+                        <a class="btn btn-outline-light" href="{{ url_for('logout') }}">Logout</a>
                     </li>&nbsp;
                 {% else %}
                     <li class="nav-item">
-                        <a class="btn btn-outline-primary" href="{{ url_for('login') }}">Login</a>
+                        <a class="btn btn-outline-light" href="{{ url_for('login') }}">Login</a>
                     </li>&nbsp;
-                    <li class='nav-item'>
-                        <a class="btn btn-outline-primary" href="{{ url_for('login_microsoft') }}"><img src="https://img.icons8.com/color/24/000000/microsoft.png" alt="MS Logo" style="height: 20px;">Login with Office 365</a>
+                    <li class="nav-item">
+                        <a class="btn btn-outline-light" href="{{ url_for('login_microsoft') }}">
+                            <img src="https://img.icons8.com/color/24/000000/microsoft.png" alt="MS Logo" style="height: 20px;">Login with Office 365
+                        </a>
                     </li>&nbsp;
                 {% endif %}
+
+                <!-- Dark mode toggle -->
+                <li class="nav-item">
+                    <button id="nav-theme-toggle" type="button"
+                            class="btn btn-outline-light"
+                            title="Toggle dark mode" style="font-size:1rem; line-height:1;">☀</button>
+                </li>
             </ul>
         </div>
     </div>
 </nav>
 
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.bundle.min.js"></script>
+<script>
+  (function() {
+    var stored = localStorage.getItem('theme');
+    var isDark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var btn = document.getElementById('nav-theme-toggle');
+    if (btn) btn.textContent = isDark ? '☀' : '🌙';
+  })();
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('nav-theme-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      var root = document.getElementById('html-root');
+      var isDark = root.classList.toggle('dark');
+      root.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      btn.textContent = isDark ? '☀' : '🌙';
+    });
+  });
+</script>

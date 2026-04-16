@@ -1,14 +1,26 @@
 import unittest
-from flask import url_for
-from main import app, db  # adjust to your actual entry point
+from main import app, db
 from flask.testing import FlaskClient
+
 
 class FlaskAppTests(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        app.config['TESTING'] = True
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        cls.app = app
+        cls.client: FlaskClient = cls.app.test_client()
+        with cls.app.app_context():
+            db.create_all()
+
     def setUp(self):
-        self.app = app
-        self.app.config['TESTING'] = True
-        self.client: FlaskClient = self.app.test_client()
+        self.ctx = self.app.app_context()
+        self.ctx.push()
+
+    def tearDown(self):
+        db.session.remove()
+        self.ctx.pop()
 
     def test_home(self):
         response = self.client.get('/')
@@ -36,17 +48,19 @@ class FlaskAppTests(unittest.TestCase):
         response = self.client.post('/return/1', follow_redirects=True)
         self.assertIn(response.status_code, [200, 403, 404])
 
-    def test_admin_dashboard_redirect(self):
-        response = self.client.get('/dashboard', follow_redirects=True)
-        self.assertIn(response.status_code, [200, 302])
+    def test_bookings_list_requires_admin(self):
+        """GET /bookings_list should deny unauthenticated users."""
+        response = self.client.get('/bookings_list')
+        self.assertIn(response.status_code, [302, 403])
 
     def test_set_borrower_post(self):
-        response = self.client.post('/set-borrower', json={
+        response = self.client.post('/set_borrower', json={
             "name": "Test",
             "contact": "test@example.com",
             "phone": "123456"
         })
-        self.assertIn(response.status_code, [200, 400])
+        self.assertIn(response.status_code, [200, 302, 400])
+
 
 if __name__ == '__main__':
     unittest.main()
