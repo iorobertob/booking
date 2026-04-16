@@ -85,9 +85,19 @@ if [[ "$DRY_RUN" != "1" ]]; then
     success "Backup saved: ${BACKUP_FILE} (${DUMP_SIZE})"
 fi
 
+# ── Install dependencies ───────────────────────────────────────────────────
+echo ""
+info "Step 2/4 — Installing/updating Python dependencies (pip install -r requirements.txt)"
+
+run pip install -q -r requirements.txt
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Dependencies up to date."
+fi
+
 # ── flask db migrate ────────────────────────────────────────────────────────
 echo ""
-info "Step 2/3 — Generating migration script (flask db migrate)"
+info "Step 3/4 — Generating migration script (flask db migrate)"
 
 export FLASK_APP=main.py
 
@@ -99,7 +109,7 @@ fi
 
 # ── flask db upgrade ────────────────────────────────────────────────────────
 echo ""
-info "Step 3/3 — Applying migration (flask db upgrade)"
+info "Step 4/4 — Applying migration (flask db upgrade)"
 
 run flask db upgrade
 
