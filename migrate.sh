@@ -68,7 +68,7 @@ BACKUP_DIR="vars"
 BACKUP_FILE="${BACKUP_DIR}/booking_dump_${TIMESTAMP}.sql"
 
 echo ""
-info "Step 1/3 — Dumping database to ${BOLD}${BACKUP_FILE}${RESET}"
+info "Step 1/5 — Dumping database to ${BOLD}${BACKUP_FILE}${RESET}"
 
 run mysqldump \
     --user="$DB_USER" \
@@ -87,7 +87,7 @@ fi
 
 # ── Install dependencies ───────────────────────────────────────────────────
 echo ""
-info "Step 2/4 — Installing/updating Python dependencies (pip install -r requirements.txt)"
+info "Step 2/5 — Installing/updating Python dependencies (pip install -r requirements.txt)"
 
 run pip install -q -r requirements.txt
 
@@ -95,26 +95,36 @@ if [[ "$DRY_RUN" != "1" ]]; then
     success "Dependencies up to date."
 fi
 
-# ── flask db migrate ────────────────────────────────────────────────────────
+# ── flask db upgrade (apply any pending migrations from repo) ───────────────
 echo ""
-info "Step 3/4 — Generating migration script (flask db migrate)"
+info "Step 3/5 — Applying any pending migrations (flask db upgrade)"
 
 export FLASK_APP=main.py
-
-run flask db migrate -m '"add booking_items and location tables"'
-
-if [[ "$DRY_RUN" != "1" ]]; then
-    success "Migration script generated."
-fi
-
-# ── flask db upgrade ────────────────────────────────────────────────────────
-echo ""
-info "Step 4/4 — Applying migration (flask db upgrade)"
 
 run flask db upgrade
 
 if [[ "$DRY_RUN" != "1" ]]; then
-    success "Database upgraded."
+    success "Database at current head."
+fi
+
+# ── flask db migrate (generate new migration if model changed) ──────────────
+echo ""
+info "Step 4/5 — Detecting model changes (flask db migrate)"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+    run flask db migrate -m '"auto"'
+else
+    MIGRATE_OUT="$(flask db migrate -m 'auto' 2>&1)" || true
+    echo "$MIGRATE_OUT"
+    if echo "$MIGRATE_OUT" | grep -q "No changes in schema detected"; then
+        success "No schema changes — skipping upgrade."
+    else
+        # ── flask db upgrade (apply newly generated migration) ──────────────
+        echo ""
+        info "Step 5/5 — Applying new migration (flask db upgrade)"
+        flask db upgrade
+        success "New migration applied."
+    fi
 fi
 
 # ── Fix NULL is_bookable values ─────────────────────────────────────────────
