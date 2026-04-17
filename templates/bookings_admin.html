@@ -14,10 +14,10 @@
             <th>Created</th>
             <th>Borrower</th>
             <th>Email</th>
-            <th>Phone</th>
             <th>Note</th>
             <th>Status</th>
             <th>Items</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -27,7 +27,6 @@
             <td>{{ booking.borrow_date.strftime('%Y-%m-%d') if booking.borrow_date else '' }}</td>
             <td>{{ booking.borrower_name }}</td>
             <td>{{ booking.borrower_email }}</td>
-            <td>{{ booking.borrower_phone }}</td>
             <td>{{ booking.note or '' }}</td>
             <td>
                 <span class="badge
@@ -42,6 +41,19 @@
                     {{ booking.booking_items | length }}
                 {% else %}
                     1
+                {% endif %}
+            </td>
+            <td onclick="event.stopPropagation()">
+                {% if booking.status == 'booked' %}
+                    <a href="{{ url_for('lend_item', booking_id=booking.id) }}"
+                       class="btn btn-success btn-sm me-1"
+                       onclick="event.stopPropagation()">Mark as Lent</a>
+                    <button class="btn btn-danger btn-sm"
+                            onclick="event.stopPropagation(); openDenyModal({{ booking.id }})">Deny</button>
+                {% elif booking.status == 'lent' %}
+                    <a href="{{ url_for('return_item', booking_id=booking.id) }}"
+                       class="btn btn-secondary btn-sm"
+                       onclick="event.stopPropagation()">Mark as Returned</a>
                 {% endif %}
             </td>
         </tr>
@@ -103,8 +115,8 @@
 
     $(document).ready(function() {
         $('#bookingsAdminTable').DataTable({
-            responsive: true,
             order: [[0, 'desc']],
+            columnDefs: [{ orderable: false, targets: 7 }],
             pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
             language: {
                 paginate: { previous: "&lt;", next: "&gt;" },
@@ -169,8 +181,9 @@
 
     function openDenyModal(bookingId) {
         document.getElementById('deny_form').action = DENY_RETURN_BASE + bookingId;
-        // close detail modal first
-        bootstrap.Modal.getInstance(document.getElementById('bookingDetailModal')).hide();
+        // close detail modal first if it's open
+        var detailModal = bootstrap.Modal.getInstance(document.getElementById('bookingDetailModal'));
+        if (detailModal) detailModal.hide();
         new bootstrap.Modal(document.getElementById('denyModal')).show();
     }
 
