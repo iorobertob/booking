@@ -34,7 +34,8 @@
                 <input type="date" id="borrow_date_{{modal_id}}" name="borrow_date" class="datepicker_borrow" required><br>
 
                 <label for="return_date">Return Date:</label>
-                <input type="text" id="return_date_{{modal_id}}" name="return_date" class="datepicker" required><br>
+                <input type="text" id="return_date_{{modal_id}}" name="return_date" class="datepicker" required>
+                <small class="max-booking-hint text-muted d-block mb-2"></small>
                 
                 {% endif %}
                 
@@ -114,3 +115,18 @@
 
 
 
+
+{# ── Booking status badge ───────────────────────────────────────────────────
+   Single source of truth for how a booking status is coloured and labelled.
+   Lifecycle: booked → approved → lent → returned, plus denied.
+   The JS equivalent for modal-rendered statuses lives in static/js/status_badge.js. #}
+{% macro status_badge(status) %}
+{%- set classes = {
+      'booked':   'bg-warning text-dark',
+      'approved': 'bg-info text-dark',
+      'lent':     'bg-primary',
+      'returned': 'bg-success',
+      'denied':   'bg-danger',
+   } -%}
+<span class="badge {{ classes.get(status, 'bg-secondary') }}">{{ status }}</span>
+{%- endmacro %}

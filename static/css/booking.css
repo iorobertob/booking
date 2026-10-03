@@ -123,6 +123,20 @@ tr:nth-child(even) {
     background: rgba(52, 73, 94, 0.04);
 }
 
+/* Non-bookable items — dimmed row.
+   Bootstrap's .table-secondary was used here before, but it hard-codes a light grey
+   background and ignores data-bs-theme, so in dark mode these rows became light-grey
+   text on a light-grey block. Dimming with opacity keeps the row legible in both
+   themes without fighting the per-theme colours set further down this file.
+   The --bs-table-* resets cancel .table-striped's inset stripe, which would
+   otherwise paint over the tint below. */
+tr.item-not-bookable > * {
+    --bs-table-bg-type: transparent;
+    --bs-table-accent-bg: transparent;
+    background-color: rgba(52, 73, 94, 0.10);
+    opacity: 0.7;
+}
+
 /* ─── Links ───────────────────────────────────────────────────────────────── */
 a {
     color: #2980b9;
@@ -237,6 +251,30 @@ a {
     }
 }
 
+/* ─── Admin booking table actions ─────────────────────────────────────────────
+   A booking row carries 0–3 actions depending on status. Without a layout the
+   buttons inherit ad-hoc margins and wrap mid-label ("Mark as / Returned").
+   Stacking them at equal width keeps every row's cell aligned, and the
+   nowrap + width:1% pair shrinks the column to its content — the same
+   convention the users/locations/programmes/items tables already use. */
+td.booking-actions {
+    white-space: nowrap;
+    width: 1%;
+    vertical-align: middle;
+}
+
+td.booking-actions .actions-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+}
+
+td.booking-actions .actions-stack .btn {
+    width: 100%;
+    white-space: nowrap;
+}
+
 td.clickable-cell {
     cursor: pointer;
     transition: transform 0.1s ease;
@@ -297,7 +335,14 @@ td.clickable-cell:hover {
     background: rgba(255, 255, 255, 0.04);
 }
 
-[data-bs-theme="dark"] a {
+[data-bs-theme="dark"] tr.item-not-bookable > * {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Links only — not link-shaped buttons. Without :not(.btn) this rule outranks
+   Bootstrap's own .btn colours and paints every <a class="btn"> light blue, which
+   is unreadable on btn-info/btn-success backgrounds. */
+[data-bs-theme="dark"] a:not(.btn) {
     color: #93c5fd;
 }
 

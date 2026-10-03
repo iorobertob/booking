@@ -35,7 +35,9 @@ See `README.md#models` for full column reference.
 ## Essential Commands
 
 ```bash
-# Development (no scheduler, port 5001)
+# Development (no scheduler, port 5006)
+# MISC_DEV=true in .env already sets this, so plain `python main.py` works too.
+# `-d` forces dev mode on regardless of the environment.
 MISC_DEV=true python main.py
 
 # Run tests

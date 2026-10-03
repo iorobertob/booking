@@ -62,7 +62,9 @@ One record per booking session (single-item or group). For new group bookings, c
 | `borrower_phone` | String(100) | |
 | `borrow_date` | DateTime | First item's borrow date |
 | `return_date` | DateTime | First item's return date |
-| `status` | String(20) | `'booked'` → `'lent'` → deleted on return |
+| `created_at` | DateTime | When the request was submitted. NULL for bookings made before v3.4 |
+| `status_changed_at` | DateTime | When the booking last moved along the lifecycle. NULL for bookings made before v3.4 |
+| `status` | String(20) | Lifecycle: `'booked'` → `'approved'` → `'lent'` → `'returned'`, plus `'denied'`. Rows are **kept** at terminal statuses (`returned`/`denied`); only `ACTIVE_STATUSES` hold an item |
 | `note` | String(300) | Optional booking note |
 
 **Relationships**:
@@ -105,6 +107,7 @@ An individual piece of equipment that can be booked.
 | `manual_link` | String(200) | URL to manual/docs |
 | `photo_path` | String(200) | Path to item photo |
 | `is_bookable` | Boolean | If False, item cannot be booked |
+| `max_booking_days` | Integer | Default `8`. Longest booking allowed for this item, counted **inclusively** (borrow Mon → return the following Mon = 8 days). Set per item by admins; enforced in `/book`, `/book_cart`, the Flatpickr return-date picker and the FullCalendar drag selection |
 
 **Relationships**: `bookings` → list of `Booking`
 
@@ -183,8 +186,9 @@ All admin routes require the user to be authenticated and have `is_admin = True`
 | GET | `/bookings_list` | Legacy flat list of all `Booking` rows (DataTables) with lend/deny/return actions per row |
 | GET | `/bookings_admin` | **New in v3**: one row per `Booking` (group view); click a row to open a detail modal |
 | GET | `/booking_detail_json/<booking_id>` | JSON — returns borrower info + items list for the detail modal in `/bookings_admin` |
-| GET | `/lend/<booking_id>` | Sets `booking.status = 'lent'`, sends lent email |
-| POST/GET | `/return/<booking_id>` | Deletes booking (cascade-deletes `BookingItem` children), sends return or deny email depending on `formAction` field |
+| GET | `/approve/<booking_id>` | **New in v3.3**: sets `status = 'approved'`, sends the "ready to collect" email. Refuses if already returned/denied |
+| GET | `/lend/<booking_id>` | Sets `status = 'lent'`, sends the collection email. Reachable from `booked` or `approved`; refuses if already returned/denied |
+| POST/GET | `/return/<booking_id>` | **Changed in v3.3**: no longer deletes. Sets `status = 'returned'`, or `'denied'` when `formAction` is `deny`/`deny_no_note`. Sends return or deny email |
 
 #### Item management
 
@@ -193,6 +197,8 @@ All admin routes require the user to be authenticated and have `is_admin = True`
 | GET/POST | `/add_item` | Add new item (Tailwind form with location dropdown) |
 | GET/POST | `/edit_item/<item_id>` | Edit existing item (Tailwind form with location dropdown pre-selected) |
 | POST | `/delete_item/<item_id>` | Delete item |
+| GET | `/admin_dashboard?section=history[&status=…]` | **New in v3.4**: full booking log — every booking ever made, including returned/denied, with per-status filter chips and counts |
+| GET | `/admin/export_items?format=csv\|xlsx\|pdf` | Download the full item list as a file (`csv` default; `xls`/`excel` are accepted aliases for `xlsx`). Triggered by the **Export items** dropdown in the Items section of the admin dashboard. Columns: ID, Name, Location, Bookable, Manual Link, Photo Path |
 
 #### Location management
 
@@ -243,10 +249,14 @@ Admin flow:
     GET /bookings_admin or /bookings_list
         Click row → GET /booking_detail_json/<id>
         Modal shows borrower info + per-item dates
-        Actions:
-            "Mark as Lent" → GET /lend/<id>   → status='lent' + email
-            "Deny"         → POST /return/<id> → deleted + deny email
-            "Mark Returned"→ GET/POST /return/<id> → deleted + return email
+        Actions (shown per status):
+            booked   → "Approve"       → GET /approve/<id>      → status='approved' + email
+                       "Mark as Lent"  → GET /lend/<id>         → status='lent'     + email
+                       "Deny"          → POST /return/<id>      → status='denied'   + deny email
+            approved → "Mark as Lent"  → GET /lend/<id>         → status='lent'     + email
+                       "Deny"          → POST /return/<id>      → status='denied'   + deny email
+            lent     → "Mark Returned" → GET/POST /return/<id>  → status='returned' + return email
+            returned / denied → no actions (terminal)
 ```
 
 ### Availability checking
@@ -256,6 +266,11 @@ Admin flow:
 2. **Old-style (legacy)**: `Booking.item_id == item_id` where `~Booking.booking_items.any()` (no children)
 
 This ensures legacy single-item bookings and new group bookings are both respected.
+
+Both branches additionally filter on `Booking.status.in_(ACTIVE_STATUSES)`. Since v3.3 a returned or
+denied booking is **kept** in the database rather than deleted, so without this filter every returned
+item would stay permanently unbookable. The same filter applies in `check_all_items_availability()`,
+`get_bookings_list()` (calendar) and the return-reminder job.
 
 ### Backwards compatibility
 
@@ -275,10 +290,26 @@ All emails are sent via MailerSend. Templates are in `templates/email_*.html`.
 | `type_of_mail` | Template | Trigger | Recipients |
 |----------------|----------|---------|------------|
 | `booking` | `email_booking.html` | Booking confirmed | Borrower + all admins |
-| `lent` | `email_lent.html` | Item marked as lent | Borrower only |
+| `approved` | `email_approved.html` | Booking approved (`/approve`) | Borrower only |
+| `lent` | `email_lent.html` | Item collected (`/lend`) | Borrower only |
 | `returned` | `email_returned.html` | Item marked as returned | Borrower only |
 | `deny` | `email_deny.html` | Booking denied | Borrower + all admins |
 | `return_reminder` | `email_return_item.html` | Daily cron (22:22) | Borrower only |
+
+### Notification sequence per booking
+
+A full lifecycle sends **four** emails (was three before v3.3):
+
+| # | When | `type_of_mail` | To |
+|---|------|----------------|-----|
+| 1 | Borrower submits the booking | `booking` | Borrower |
+| 1b | Same moment — request for action | `booking_admin` | Admins (Approve / Deny buttons) |
+| 2 | Admin approves | `approved` | Borrower |
+| 3 | Admin marks collected | `lent` | Borrower |
+| 4 | Admin marks returned | `returned` | Borrower |
+
+Denial replaces steps 2–4 with a single `deny` email (or none at all when the admin uses
+`deny_no_note`). The daily return reminder is independent of this sequence.
 
 Email templates receive: `borrower_name`, `borrower_email`, `borrower_phone`, `borrow_date`, `return_date`, `items` (list of `BookingItem` or `Booking` objects), `now`.
 
@@ -286,7 +317,7 @@ The `items` list uses duck typing — both `BookingItem` and `Booking` expose `.
 
 ### Daily reminder job
 
-`check_and_send_reminders_tomorrow()` runs at 22:22 via APScheduler (production only). Queries all `Booking` rows due today or tomorrow, groups them by borrower, and sends one aggregated email per borrower.
+`check_and_send_reminders_tomorrow()` runs at 22:22 via APScheduler (production only). Queries `Booking` rows due today or tomorrow **whose status is still active**, groups them by borrower, and sends one aggregated email per borrower. Returned and denied bookings are never chased.
 
 > The reminder job only queries old-style `Booking` rows directly. Group bookings will need updating here in a future version.
 
@@ -322,7 +353,7 @@ cp .env.example .env
 pip install -r requirements.txt
 ```
 
-3. Run in development mode (no scheduler, port 5001):
+3. Run in development mode (no scheduler, port 5006):
 
 ```bash
 MISC_DEV=true python main.py
@@ -394,6 +425,7 @@ mysql -u <db_user> -p <db_name> < vars/booking_dump_<timestamp>.sql
 |-----------|-------------|
 | Initial | `booking`, `item`, `user` tables |
 | v2.1 | `booking.note`, `item.is_bookable` columns |
+| v3.4 (`b11084c2f89c`) | `item.max_booking_days` (server_default `8`), `booking.created_at`, `booking.status_changed_at` |
 | v3.0 | `booking_item` table, `location` table |
 
 After deploying v3.0 for the first time, run:
@@ -438,8 +470,10 @@ sudo systemctl restart booking.service
 ---
 
 ## TODO
-
-* Students should add a note in their profile and/or booking on what they study and what the booking is for.
+* Update to  Booked / Lent / Returned statuse — DONE (v3.3: booked / approved / lent / returned / denied)
+* Add max lending time. — DONE (v3.4: `Item.max_booking_days`, default 8) 
+* Group by categories like a music shop (microphones, instrruments, utilities, )
+* Students should add a note in their profile and/or booking on what they study and what the booking is for. DONE
 * Do not serve images from Flask — serve from nginx instead.
 * Simplify the email templates (currently bloated HTML).
 * Implement Flask Blueprints.
@@ -450,11 +484,10 @@ sudo systemctl restart booking.service
 * Refactor: `url_for('book_cart')` and `url_for('book')` are always the same — no need to pass them as data attributes to the JS script.
 * Return to same page search/filter conditions when going back.
 * Bulk deny bookings by checkbox selection.
+* Bulk or individually mark as returned. 
 * Mark as lent or returned in bulk.
 * Grouping items and show quantity available.
-* Categories for items.
-* Booking rooms in the same website.
-* Connect to Google Calendar.
+* Connect to Google Calendar and/or apple and/or outlook
 * Note on return about state of item.
 * Comments on item pages.
 * Add [random/deterministic] colours to booking calendar (partially done — `colorFromString()` in `item_detail_modals.js`).
@@ -463,11 +496,78 @@ sudo systemctl restart booking.service
 * Keep sending reminders while item is "lent" and include a message asking admin to mark it returned.
 * Decide whether to send reminder emails to admins.
 * Bulk delete items by checkbox.
-* Network on LMTA_guest???
+* Add a Booking Log — DONE (v3.4: admin dashboard → History)
+* Add possibility to return items individually that were bulk booked/lent.
+* Add a reminder in the return email to take a photo of where the item was left. (integrate on the phone)
 
 ---
 
 ## Changelog
+
+### v3.4 — 2026-10-03
+- **Tidier action buttons in the admin booking tables**: the Actions cell had no layout, so buttons
+  inherited ad-hoc `me-1` margins and wrapped mid-label ("Mark as / Returned"), and rows with one,
+  two or three actions all lined up differently. Added a `.booking-actions` cell class in
+  `booking.css` that stacks the buttons at equal width with a consistent gap and no label wrapping,
+  and shrinks the column to its content via the `white-space: nowrap; width: 1%` convention the
+  other admin tables already use. Applied to both `admin_dashboard.html` and `bookings_admin.html`.
+- **Item page and `/bookings_list` show active bookings only**: both now filter on `ACTIVE_STATUSES`.
+  Since v3.3 kept returned/denied rows, these views were listing closed bookings and making free
+  periods look occupied — the opposite of what the item page is for (seeing when an item that is out
+  now is free again). `approved` is included because it holds the dates just as `lent` does; hiding it
+  would advertise a reserved period as free. The item table is ordered soonest-first. The complete
+  record of every booking remains in the admin dashboard History section.
+- **Booking history log** (`/admin_dashboard?section=history`): a new **History** item in the admin
+  sidebar listing every booking ever made — requested time, borrower, items, dates, status badge, last
+  status change and note — with filter chips per status (showing counts) and DataTables search/sort/paging.
+  Before v3.3 no history was possible because returns deleted the row; this makes the retained rows usable.
+- **`Booking.created_at` / `Booking.status_changed_at`**: timestamps so the log can show *when* things
+  happened. `status_changed_at` is maintained by the new `Booking.set_status()` helper, used by approve,
+  lend, return and deny. Both are NULL for bookings created before this version — the history shows "—".
+- **`Item.max_booking_days`**: per-item cap on booking length, default **8 days**, counted inclusively
+  (borrow Mon → return the following Mon = 8 days). Editable in `add_item.html`, `edit_item.html` and the
+  admin dashboard Items section, and shown as a column there and in the item export.
+  - Enforced **server-side** in `/book` and `/book_cart` (the authority), and **client-side** for immediate
+    feedback: the Flatpickr return-date picker gets a `maxDate`, FullCalendar's `selectAllow` rejects
+    over-long drag selections, and `submitForm()` blocks submission with a message naming both lengths.
+  - When several items are booked together the **strictest cap wins** — `setMaxBookingDays()` takes the
+    minimum across the selection. The cart re-reads caps from the DB so an admin change applies to carts
+    already in flight.
+- **DB migration required**: `b11084c2f89c`. Run `./migrate.sh` (or `flask db upgrade`) on the server.
+  All three columns are additive; existing items get `max_booking_days = 8` via `server_default`.
+
+### v3.3 — 2026-10-03
+- **Booking status lifecycle**: `booked → approved → lent → returned`, plus `denied`. Previously only
+  `booked` and `lent` existed; a return or denial **deleted** the booking row, so there was no history.
+  - Statuses are now named constants in `main.py` (`STATUS_*`, `ACTIVE_STATUSES`, `TERMINAL_STATUSES`)
+    instead of string literals scattered across the codebase.
+  - `/return` and deny keep the row and set a terminal status. **Availability is now driven by status,
+    not by row deletion**: `is_item_available()`, `check_all_items_availability()`, `get_bookings_list()`
+    and the return-reminder job all filter on `ACTIVE_STATUSES`, so returned/denied bookings release the
+    item and free their calendar dates.
+  - New route `/approve/<booking_id>`. Approve and Lend both refuse to act on a terminal booking.
+  - **Notifications: 4 per full cycle, up from 3.** A new "Booking approved — ready to collect" email
+    (`email_approved.html`) is sent on approval; the lend email is now collection-only ("Item(s)
+    Collected") instead of "Booking approved and collected". The admin booking-request email's primary
+    button is now **Approve Booking** rather than Mark as Lent.
+  - UI: a single `status_badge()` macro in `macros.html` (mirrored for modal JS in
+    `static/js/status_badge.js`) replaces the per-template badge logic in `admin_dashboard.html`,
+    `bookings_admin.html`, `bookings_list.html`, `profile.html` and `item_details.html`. Action buttons
+    are per status: booked → Approve/Lend/Deny, approved → Lend/Deny, lent → Return, terminal → none.
+  - **No DB migration required** — `status` is already `String(20)` and the new values fit. Existing
+    `booked`/`lent` rows stay valid.
+- **Dark mode fix — link-buttons**: `[data-bs-theme="dark"] a` outranked Bootstrap's `.btn` colours and
+  painted every `<a class="btn">` light blue (unreadable on `btn-info`/`btn-success`). Scoped to
+  `a:not(.btn)`.
+
+### v3.2 — 2026-09-06
+- **Dark mode fix — non-bookable items**: rows for `is_bookable = False` on the home page used Bootstrap's `.table-secondary`, which hard-codes a light grey background and ignores `data-bs-theme`, so in dark mode the row rendered as pale text on a pale block. Replaced with a theme-aware `.item-not-bookable` class in `booking.css` (subtle tint + `opacity: 0.7`, with a dark-mode override), legible in both themes.
+- **Dev-mode startup fix**: the `__main__` block no longer overwrites `LOCALHOST` with `False` when `-d` is absent, so `MISC_DEV=true` in `.env`/the environment is honoured again and `python main.py` starts on port 5006 instead of the occupied default 5000. `-d`/`--dev` still forces dev mode on. The `scheduler.shutdown()` call in the shutdown handler is now guarded, so a startup failure reports the real error instead of masking it with `NameError: name 'scheduler' is not defined`.
+- **Item export**: `/admin/export_items` streams the full item list as CSV, XLSX or PDF; an **Export items** dropdown sits next to the heading in the admin dashboard Items section.
+  - CSV is written with a UTF-8 BOM so Excel opens Lithuanian characters correctly.
+  - XLSX (via `openpyxl`) has a bold header row, frozen header, auto-filter and auto-sized columns.
+  - PDF (via `reportlab`) is landscape A4 with a repeating header row.
+  - New dependencies: `openpyxl`, `reportlab` — run `pip install -r requirements.txt` on the server after deploying. Both are imported lazily; if one is missing the route flashes an error instead of breaking the dashboard.
 
 ### v3.0 — 2026-03-03
 - **Group booking**: one `Booking` record per cart session + one `BookingItem` per item (backwards-compatible with legacy single-item bookings).

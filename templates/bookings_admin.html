@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 
+{% from 'macros.html' import status_badge %}
+
 {% block content %}
 
 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -17,7 +19,7 @@
             <th>Note</th>
             <th>Status</th>
             <th>Items</th>
-            <th>Actions</th>
+            <th class="booking-actions">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -28,14 +30,7 @@
             <td>{{ booking.borrower_name }}</td>
             <td>{{ booking.borrower_email }}</td>
             <td>{{ booking.note or '' }}</td>
-            <td>
-                <span class="badge
-                    {% if booking.status == 'booked' %}bg-warning text-dark
-                    {% elif booking.status == 'lent' %}bg-primary
-                    {% else %}bg-secondary{% endif %}">
-                    {{ booking.status }}
-                </span>
-            </td>
+            <td>{{ status_badge(booking.status) }}</td>
             <td>
                 {% if booking.booking_items %}
                     {{ booking.booking_items | length }}
@@ -43,10 +38,20 @@
                     1
                 {% endif %}
             </td>
-            <td onclick="event.stopPropagation()">
+            <td class="booking-actions" onclick="event.stopPropagation()">
+                <div class="actions-stack">
                 {% if booking.status == 'booked' %}
+                    <a href="{{ url_for('approve_booking', booking_id=booking.id) }}"
+                       class="btn btn-info btn-sm"
+                       onclick="event.stopPropagation()">Approve</a>
                     <a href="{{ url_for('lend_item', booking_id=booking.id) }}"
-                       class="btn btn-success btn-sm me-1"
+                       class="btn btn-success btn-sm"
+                       onclick="event.stopPropagation()">Mark as Lent</a>
+                    <button class="btn btn-danger btn-sm"
+                            onclick="event.stopPropagation(); openDenyModal({{ booking.id }})">Deny</button>
+                {% elif booking.status == 'approved' %}
+                    <a href="{{ url_for('lend_item', booking_id=booking.id) }}"
+                       class="btn btn-success btn-sm"
                        onclick="event.stopPropagation()">Mark as Lent</a>
                     <button class="btn btn-danger btn-sm"
                             onclick="event.stopPropagation(); openDenyModal({{ booking.id }})">Deny</button>
@@ -55,6 +60,7 @@
                        class="btn btn-secondary btn-sm"
                        onclick="event.stopPropagation()">Mark as Returned</a>
                 {% endif %}
+                </div>
             </td>
         </tr>
         {% endfor %}
@@ -143,10 +149,7 @@
 
                 var statusEl = document.getElementById('modal-status');
                 statusEl.textContent = data.status;
-                statusEl.className = 'badge ' + (
-                    data.status === 'booked' ? 'bg-warning text-dark' :
-                    data.status === 'lent'   ? 'bg-primary' : 'bg-secondary'
-                );
+                statusEl.className = 'badge ' + statusBadgeClass(data.status);
 
                 // Populate items table
                 var tbody = document.getElementById('modal-items-body');
@@ -165,6 +168,11 @@
                 var actionsEl = document.getElementById('modal-actions');
                 actionsEl.innerHTML = '';
                 if (data.status === 'booked') {
+                    actionsEl.innerHTML =
+                        '<a href="' + data.approve_url + '" class="btn btn-info btn-sm me-2">Approve</a>' +
+                        '<a href="' + data.lend_url + '" class="btn btn-success btn-sm me-2">Mark as Lent</a>' +
+                        '<button class="btn btn-danger btn-sm" onclick="openDenyModal(' + data.id + ')">Deny</button>';
+                } else if (data.status === 'approved') {
                     actionsEl.innerHTML =
                         '<a href="' + data.lend_url + '" class="btn btn-success btn-sm me-2">Mark as Lent</a>' +
                         '<button class="btn btn-danger btn-sm" onclick="openDenyModal(' + data.id + ')">Deny</button>';

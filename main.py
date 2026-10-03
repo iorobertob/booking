@@ -1,7 +1,7 @@
 import argparse
 import re
 from functools import wraps
-from flask import session, Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, abort
+from flask import session, Flask, render_template, request, redirect, url_for, flash, send_from_directory, send_file, jsonify, abort
 from mailersend import MailerSendClient, EmailBuilder, IdentityBuilder
 import mailersend
 from flask_sqlalchemy import SQLAlchemy
@@ -12,6 +12,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, timedelta
 import pymysql
 import json
+import csv
+import io
 import os
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -19,7 +21,6 @@ import atexit
 import logging
 from logging.handlers import RotatingFileHandler
 from collections import defaultdict
-from types import SimpleNamespace
 from msal import ConfidentialClientApplication
 import time
 
@@ -118,6 +119,33 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 
+# ── Booking statuses ──────────────────────────────────────────────────────────
+# Lifecycle:  booked → approved → lent → returned
+#                   ↘ denied
+# ACTIVE statuses hold the item: they block other bookings over the same dates.
+# TERMINAL statuses release it, so every availability/calendar query must exclude
+# them — the booking row is kept for history instead of being deleted.
+STATUS_BOOKED   = 'booked'      # request submitted, awaiting admin decision
+STATUS_APPROVED = 'approved'    # admin approved; item reserved, not yet collected
+STATUS_LENT     = 'lent'        # physically handed over to the borrower
+STATUS_RETURNED = 'returned'    # physically returned — item free again
+STATUS_DENIED   = 'denied'      # admin rejected the request — item free again
+
+ACTIVE_STATUSES   = (STATUS_BOOKED, STATUS_APPROVED, STATUS_LENT)
+TERMINAL_STATUSES = (STATUS_RETURNED, STATUS_DENIED)
+ALL_STATUSES      = ACTIVE_STATUSES + TERMINAL_STATUSES
+
+# Default booking length cap for a new item, in days counted inclusively
+# (borrow Mon → return the following Mon = 8 days).
+DEFAULT_MAX_BOOKING_DAYS = 8
+
+
+def booking_length_days(borrow_date, return_date):
+    """Length of a booking in days, counting both the borrow and return day."""
+    return (return_date.date() - borrow_date.date()).days + 1 \
+        if hasattr(borrow_date, 'date') else (return_date - borrow_date).days + 1
+
+
 class Booking(db.Model):
     id              = db.Column(db.Integer,     primary_key=True)
     item_id         = db.Column(db.Integer,     db.ForeignKey('item.id'), nullable = False)
@@ -128,8 +156,12 @@ class Booking(db.Model):
     borrower_phone  = db.Column(db.String(100), nullable=False)
     borrow_date     = db.Column(db.DateTime,    nullable=False)
     return_date     = db.Column(db.DateTime,    nullable=False)
-    status          = db.Column(db.String(20),  default='booked')
+    status          = db.Column(db.String(20),  default=STATUS_BOOKED)
     note            = db.Column(db.String(300), default='', nullable=True)
+    # History-log timestamps. created_at is when the request was submitted;
+    # status_changed_at is when it last moved along the lifecycle.
+    created_at        = db.Column(db.DateTime, default=datetime.now, nullable=True)
+    status_changed_at = db.Column(db.DateTime, default=datetime.now, nullable=True)
     booking_items   = db.relationship('BookingItem', back_populates='booking', cascade='all, delete-orphan')
     item            = db.relationship('Item',   back_populates='bookings')
 
@@ -146,7 +178,14 @@ class Booking(db.Model):
             "return_date"   : self.return_date.isoformat() if self.return_date else None,
             "status"        : self.status,
             "note"          : self.note or '',
+            "created_at"        : self.created_at.isoformat() if self.created_at else None,
+            "status_changed_at" : self.status_changed_at.isoformat() if self.status_changed_at else None,
         }
+
+    def set_status(self, new_status):
+        """Move the booking along the lifecycle and stamp when it happened."""
+        self.status            = new_status
+        self.status_changed_at = datetime.now()
 
 # Define the Item model
 class Item(db.Model):
@@ -156,6 +195,10 @@ class Item(db.Model):
     manual_link     = db.Column(db.String(200), default='')
     photo_path      = db.Column(db.String(200), default='')
     is_bookable     = db.Column(db.Boolean,     default=True, nullable=False)
+    # Longest booking allowed for this item, counted inclusively: a borrow date of
+    # Mon and a return date of the following Mon is 8 days. Set per item by admins.
+    max_booking_days = db.Column(db.Integer, default=DEFAULT_MAX_BOOKING_DAYS,
+                                 server_default=str(DEFAULT_MAX_BOOKING_DAYS), nullable=False)
     bookings        = db.relationship('Booking', order_by=Booking.id, back_populates='item')
 
 class BookingItem(db.Model):
@@ -286,11 +329,11 @@ def home():
     for item in items:
         # New-style: lent booking via BookingItem
         booking = db.session.query(Booking).join(BookingItem).filter(
-            BookingItem.item_id == item.id, Booking.status == 'lent'
+            BookingItem.item_id == item.id, Booking.status == STATUS_LENT
         ).first()
         # Fallback old-style
         if not booking:
-            booking = Booking.query.filter_by(item_id=item.id, status='lent').first()
+            booking = Booking.query.filter_by(item_id=item.id, status=STATUS_LENT).first()
         bookings.append(booking)
 
     borrower_info_session = session.get('borrower_info')
@@ -484,16 +527,23 @@ def set_borrower():
 def item_details(item_id):
     item = Item.query.get_or_404(item_id)
 
+    # Only active bookings: this table answers "when is this item taken?", so a
+    # returned or denied booking would wrongly make a free period look occupied.
+    # 'approved' counts as active — it holds the dates just like 'lent'.
+    # The full record of past bookings lives in the admin History section.
     # Old-style (no BookingItem children)
     old_bookings = Booking.query.filter(
         Booking.item_id == item_id,
         ~Booking.booking_items.any(),
+        Booking.status.in_(ACTIVE_STATUSES),
     ).all()
     # New-style: Booking objects whose BookingItems reference this item
     new_bookings = db.session.query(Booking).join(BookingItem).filter(
-        BookingItem.item_id == item_id
+        BookingItem.item_id == item_id,
+        Booking.status.in_(ACTIVE_STATUSES),
     ).all()
-    bookings = old_bookings + new_bookings
+    # Soonest first, so an upcoming free period is easy to spot
+    bookings = sorted(old_bookings + new_bookings, key=lambda b: b.borrow_date)
 
     booking_dates = get_bookings_list(item_id=item_id)
     booked_dates  = []
@@ -546,8 +596,10 @@ def check_all_items_availability():
                 db.and_(BookingItem.borrow_date <= now, BookingItem.return_date >= now),
                 db.and_(BookingItem.borrow_date >= now, BookingItem.return_date <= now),
             )
-            bi = db.session.query(BookingItem).filter(
-                BookingItem.item_id == item.id, now_overlap
+            bi = db.session.query(BookingItem).join(BookingItem.booking).filter(
+                BookingItem.item_id == item.id,
+                Booking.status.in_(ACTIVE_STATUSES),
+                now_overlap,
             ).first()
             if bi:
                 status = bi.booking.status
@@ -555,6 +607,7 @@ def check_all_items_availability():
                 old = Booking.query.filter(
                     Booking.item_id == item.id,
                     ~Booking.booking_items.any(),
+                    Booking.status.in_(ACTIVE_STATUSES),
                     db.or_(
                         db.and_(Booking.borrow_date <= now, Booking.return_date >= now),
                         db.and_(Booking.borrow_date >= now, Booking.return_date <= now),
@@ -572,8 +625,13 @@ def is_item_available(item_id, start_date, end_date):
         db.and_(BookingItem.borrow_date <= end_date,   BookingItem.return_date >= end_date),
         db.and_(BookingItem.borrow_date >= start_date, BookingItem.return_date <= end_date),
     )
-    # New-style: check BookingItem table
-    if db.session.query(BookingItem).filter(BookingItem.item_id == item_id, overlap).first():
+    # New-style: check BookingItem table. Returned/denied bookings are kept as
+    # history, so they must not count as holding the item.
+    if db.session.query(BookingItem).join(BookingItem.booking).filter(
+        BookingItem.item_id == item_id,
+        Booking.status.in_(ACTIVE_STATUSES),
+        overlap,
+    ).first():
         return False
     # Old-style: Booking without BookingItem children
     old_overlap = db.or_(
@@ -584,18 +642,30 @@ def is_item_available(item_id, start_date, end_date):
     return Booking.query.filter(
         Booking.item_id == item_id,
         ~Booking.booking_items.any(),
+        Booking.status.in_(ACTIVE_STATUSES),
         old_overlap,
     ).first() is None
 
 
 def get_bookings_list(item_id):
-    """Fetch all booking date ranges for this item (old-style and new-style)."""
+    """Fetch all booking date ranges for this item (old-style and new-style).
+
+    Only ACTIVE bookings block the calendar — returned and denied ones are kept
+    as history and their dates must become selectable again.
+    """
     bookings_list = []
     # Old-style: Booking directly on item, no BookingItem children
-    for b in Booking.query.filter(Booking.item_id == item_id, ~Booking.booking_items.any()).all():
+    for b in Booking.query.filter(
+        Booking.item_id == item_id,
+        ~Booking.booking_items.any(),
+        Booking.status.in_(ACTIVE_STATUSES),
+    ).all():
         bookings_list.append({"borrow_date": b.borrow_date, "return_date": b.return_date, "borrower_name": b.borrower_name})
     # New-style: via BookingItem
-    for bi in BookingItem.query.filter_by(item_id=item_id).all():
+    for bi in BookingItem.query.join(BookingItem.booking).filter(
+        BookingItem.item_id == item_id,
+        Booking.status.in_(ACTIVE_STATUSES),
+    ).all():
         bookings_list.append({"borrow_date": bi.borrow_date, "return_date": bi.return_date, "borrower_name": bi.booking.borrower_name})
     return bookings_list
 
@@ -665,6 +735,10 @@ def book():
         if return_date < borrow_date:
             flash('Return date must be after borrow date.', 'danger')
             return redirect(url_for('cart'))
+        max_days = item.max_booking_days or DEFAULT_MAX_BOOKING_DAYS
+        if booking_length_days(borrow_date, return_date) > max_days:
+            flash(f'{item.name} can be booked for at most {max_days} days.', 'danger')
+            return redirect(url_for('cart'))
         if not is_item_available(item.id, borrow_date, return_date):
             flash(f'Selected dates are not available for {item.name}.', 'danger')
             return redirect(url_for('cart'))
@@ -726,12 +800,12 @@ def book():
         {"name": "Edvinas",       "email": "edvinas.siliunas@lmta.lt"},
         {"name": "Edvinas Gmail", "email": "siliunas.edvinas@gmail.com"},
         {"name": "Roberto",       "email": "roberto.becerra@lmta.lt"},
-        {"name": "Julius",        "email": "julius.aglinskas@lmta.lt"},
-        {"name": "Mantautas",     "email": "mantautas.krukauskas@lmta.lt"},
+        # {"name": "Julius",        "email": "julius.aglinskas@lmta.lt"},
+        # {"name": "Mantautas",     "email": "mantautas.krukauskas@lmta.lt"},
     ]
     admin_contacts = ALL_ADMIN_CONTACTS if not LOCALHOST else DEV_ADMIN_CONTACTS
-    lend_url = url_for('lend_item',   booking_id=new_booking.id, _external=True)
-    deny_url = url_for('deny_booking', booking_id=new_booking.id, _external=True)
+    approve_url = url_for('approve_booking', booking_id=new_booking.id, _external=True)
+    deny_url    = url_for('deny_booking',    booking_id=new_booking.id, _external=True)
     send_email(
         borrower_email = borrower_email,
         borrower_name  = borrower_name,
@@ -744,7 +818,7 @@ def book():
         items          = new_booking.booking_items,
         type_of_mail   = 'booking_admin',
         user_email     = user_email,
-        lend_url       = lend_url,
+        approve_url    = approve_url,
         deny_url       = deny_url,
         note           = note,
         recipients     = admin_contacts,
@@ -797,7 +871,11 @@ def bookings_list():
         flash("Your session has expired. Please log in again.", "warning")
         return redirect(url_for('login'))
 
-    bookings = Booking.query.order_by(Booking.borrow_date.desc()).all()
+    # Active bookings only — this is a working list with lend/return actions.
+    # Closed bookings are in the admin dashboard History section.
+    bookings = Booking.query.filter(
+        Booking.status.in_(ACTIVE_STATUSES)
+    ).order_by(Booking.borrow_date.desc()).all()
     return render_template('bookings_list.html', bookings=bookings)
 
 
@@ -855,6 +933,12 @@ def book_cart():
         borrow_date = datetime.strptime(borrow_date_str, '%Y-%m-%d')
         return_date = datetime.strptime(return_date_str, '%Y-%m-%d')
 
+        if item_obj:
+            max_days = item_obj.max_booking_days or DEFAULT_MAX_BOOKING_DAYS
+            if booking_length_days(borrow_date, return_date) > max_days:
+                flash(f'{item_obj.name} can be booked for at most {max_days} days.', 'danger')
+                return redirect(url_for('home'))
+
         # Append to our cart_items list
         cart_items.append({
             "borrower_name"     : borrower_name,
@@ -864,6 +948,7 @@ def book_cart():
             "id"                : item['id'],
             "name"              : item['name'],
             "location"          : item['location'],
+            "max_booking_days"  : (item_obj.max_booking_days if item_obj else None) or DEFAULT_MAX_BOOKING_DAYS,
             "borrow_date"       : borrow_date.strftime('%Y-%m-%d'),  # Convert back to string for JSON serialization
             "return_date"       : return_date.strftime('%Y-%m-%d')
         })
@@ -917,6 +1002,13 @@ def cart():
 
             all_booking_dates += booked_dates_str
         
+        # Re-read caps from the DB rather than trusting the session copy, so an
+        # admin change to max_booking_days applies to carts already in flight.
+        max_days_by_id = {
+            i.id: (i.max_booking_days or DEFAULT_MAX_BOOKING_DAYS)
+            for i in Item.query.filter(Item.id.in_(item_ids)).all()
+        }
+
         for cart_item in cart_items:
             item_detail = {}
             item_detail['id']               = cart_item.get('id')
@@ -927,6 +1019,8 @@ def cart():
             item_detail['borrower_name']    = cart_item.get('borrower_name')
             item_detail['borrower_email']   = cart_item.get('borrower_email')
             item_detail['borrower_phone']   = cart_item.get('borrower_phone')
+            item_detail['max_booking_days'] = max_days_by_id.get(
+                cart_item.get('id'), cart_item.get('max_booking_days') or DEFAULT_MAX_BOOKING_DAYS)
 
             items_with_booking_info.append(item_detail)
 
@@ -962,11 +1056,17 @@ def remove_from_cart(item_id):
     return redirect(url_for('cart'))
 
 
-@app.route('/lend/<int:booking_id>')
+@app.route('/approve/<int:booking_id>')
 @admin_required
-def lend_item(booking_id):
+def approve_booking(booking_id):
+    """Admin accepts the request. The item stays reserved until it is collected."""
     booking = Booking.query.get_or_404(booking_id)
-    booking.status = 'lent'
+
+    if booking.status in TERMINAL_STATUSES:
+        flash(f'Booking {booking.id} is already {booking.status} and cannot be approved.', 'warning')
+        return redirect(request.referrer or url_for('admin_dashboard', section='bookings'))
+
+    booking.set_status(STATUS_APPROVED)
     db.session.commit()
 
     items_for_email = booking.booking_items if booking.booking_items else [booking]
@@ -976,7 +1076,39 @@ def lend_item(booking_id):
         borrower_phone = booking.borrower_phone,
         borrow_date    = booking.borrow_date.date(),
         return_date    = booking.return_date.date(),
-        subject        = "Booking approved and collected — Do Not Reply",
+        subject        = "Booking approved — ready to collect — Do Not Reply",
+        text_content   = "",
+        html_content   = "",
+        items          = items_for_email,
+        type_of_mail   = 'approved',
+    )
+
+    flash(f'Booking {booking.id} approved — borrower notified to collect.', 'success')
+    return redirect(request.referrer or url_for('admin_dashboard', section='bookings'))
+
+
+@app.route('/lend/<int:booking_id>')
+@admin_required
+def lend_item(booking_id):
+    """Item physically handed over. Reachable from 'booked' too, so the admin can
+    still lend in one step from the booking-request email."""
+    booking = Booking.query.get_or_404(booking_id)
+
+    if booking.status in TERMINAL_STATUSES:
+        flash(f'Booking {booking.id} is already {booking.status} and cannot be lent.', 'warning')
+        return redirect(request.referrer or url_for('admin_dashboard', section='bookings'))
+
+    booking.set_status(STATUS_LENT)
+    db.session.commit()
+
+    items_for_email = booking.booking_items if booking.booking_items else [booking]
+    send_email(
+        borrower_email = booking.borrower_email,
+        borrower_name  = booking.borrower_name,
+        borrower_phone = booking.borrower_phone,
+        borrow_date    = booking.borrow_date.date(),
+        return_date    = booking.return_date.date(),
+        subject        = "Item(s) collected — Do Not Reply",
         text_content   = "",
         html_content   = "",
         items          = items_for_email,
@@ -990,47 +1122,36 @@ def lend_item(booking_id):
 @app.route('/return/<int:booking_id>', methods=['POST', 'GET'])
 @admin_required
 def return_item(booking_id):
+    """Close a booking: 'returned' for a genuine return, 'denied' when the admin
+    rejects the request. The row is kept as history — the status change is what
+    releases the item, since every availability query ignores terminal statuses."""
     booking = Booking.query.get_or_404(booking_id)
-
-    # Capture all needed data before the booking is deleted from the DB
-    saved_email     = booking.borrower_email
-    saved_name      = booking.borrower_name
-    saved_phone     = booking.borrower_phone
-    saved_borrow    = booking.borrow_date.date()
-    saved_return    = booking.return_date.date()
-    saved_item_name = booking.item_name
-
-    # Capture email items before cascade-delete removes BookingItems
-    if booking.booking_items:
-        items_for_email = [
-            SimpleNamespace(
-                item_name   = bi.item_name,
-                borrow_date = bi.borrow_date,
-                return_date = bi.return_date,
-            )
-            for bi in booking.booking_items
-        ]
-    else:
-        items_for_email = [booking]  # old-style; SQLAlchemy keeps in-memory attrs
 
     actionType = request.form.get("formAction")
     note       = request.form.get('note')
 
-    db.session.delete(booking)
+    if booking.status in TERMINAL_STATUSES:
+        flash(f'Booking {booking.id} is already {booking.status}.', 'warning')
+        return redirect(url_for('admin_dashboard', section='bookings'))
+
+    is_deny = actionType in ('deny', 'deny_no_note')
+    booking.set_status(STATUS_DENIED if is_deny else STATUS_RETURNED)
     db.session.commit()
 
-    if actionType in ('deny', 'deny_no_note'):
-        flash(f'Booking for {saved_item_name} denied.', 'success')
+    items_for_email = booking.booking_items if booking.booking_items else [booking]
+
+    if is_deny:
+        flash(f'Booking for {booking.item_name} denied.', 'success')
     else:
-        flash(f'Item {saved_item_name} marked as returned!', 'success')
+        flash(f'Item {booking.item_name} marked as returned!', 'success')
 
     if actionType == 'deny':
         send_email(
-            borrower_email = saved_email,
-            borrower_name  = saved_name,
-            borrower_phone = saved_phone,
-            borrow_date    = saved_borrow,
-            return_date    = saved_return,
+            borrower_email = booking.borrower_email,
+            borrower_name  = booking.borrower_name,
+            borrower_phone = booking.borrower_phone,
+            borrow_date    = booking.borrow_date.date(),
+            return_date    = booking.return_date.date(),
             subject        = "Booking denied — Do Not Reply",
             text_content   = "",
             html_content   = "",
@@ -1039,14 +1160,14 @@ def return_item(booking_id):
             note           = note,
         )
     elif actionType == 'deny_no_note':
-        pass  # booking deleted silently; no email sent
+        pass  # closed silently; no email sent
     else:
         send_email(
-            borrower_email = saved_email,
-            borrower_name  = saved_name,
-            borrower_phone = saved_phone,
-            borrow_date    = saved_borrow,
-            return_date    = saved_return,
+            borrower_email = booking.borrower_email,
+            borrower_name  = booking.borrower_name,
+            borrower_phone = booking.borrower_phone,
+            borrow_date    = booking.borrow_date.date(),
+            return_date    = booking.return_date.date(),
             subject        = "Item returned — Thank you — Do Not Reply",
             text_content   = "",
             html_content   = "",
@@ -1059,6 +1180,18 @@ def return_item(booking_id):
     return redirect(request.referrer or url_for('home'))
 
 
+def _max_booking_days_from_form(form, fallback=DEFAULT_MAX_BOOKING_DAYS):
+    """Read max_booking_days from an admin form, falling back on blank/invalid input."""
+    raw = (form.get('max_booking_days') or '').strip()
+    if not raw:
+        return fallback
+    try:
+        value = int(raw)
+    except ValueError:
+        return fallback
+    return max(1, value)
+
+
 @app.route('/add_item', methods=['GET', 'POST'])
 @admin_required
 def add_item():
@@ -1066,7 +1199,8 @@ def add_item():
         name        = request.form.get('name')
         location    = request.form.get('location')
         is_bookable = 'is_bookable' in request.form
-        new_item = Item(name=name, location=location, is_bookable=is_bookable)
+        new_item = Item(name=name, location=location, is_bookable=is_bookable,
+                        max_booking_days=_max_booking_days_from_form(request.form))
         db.session.add(new_item)
         db.session.commit()
         flash(f'Item {name} added successfully!', 'success')
@@ -1092,6 +1226,8 @@ def edit_item(item_id):
         existing_item.name        = name
         existing_item.location    = location
         existing_item.is_bookable = 'is_bookable' in request.form
+        existing_item.max_booking_days = _max_booking_days_from_form(
+            request.form, fallback=existing_item.max_booking_days or DEFAULT_MAX_BOOKING_DAYS)
         db.session.commit()
         flash(f'Item {name} edited successfully!', 'success')
         next_url = request.form.get('next') or url_for('home')
@@ -1108,6 +1244,142 @@ def delete_item(item_id):
     flash(f'Item {name} deleted successfully!', 'success')
     next_url = request.form.get('next') or url_for('home')
     return redirect(next_url)
+
+
+# ── Item export (CSV / XLSX / PDF) ────────────────────────────────────────
+ITEM_EXPORT_HEADERS = ['ID', 'Name', 'Location', 'Bookable', 'Max Booking Days', 'Manual Link', 'Photo Path']
+
+
+def _item_export_rows():
+    """All items, ordered by name, as a list of row lists matching ITEM_EXPORT_HEADERS."""
+    return [
+        [
+            item.id,
+            (item.name or '').strip(),
+            (item.location or '').strip(),
+            'Yes' if item.is_bookable else 'No',
+            item.max_booking_days or DEFAULT_MAX_BOOKING_DAYS,
+            item.manual_link or '',
+            item.photo_path or '',
+        ]
+        for item in Item.query.order_by(Item.name).all()
+    ]
+
+
+def _items_csv(headers, rows):
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    # utf-8-sig so Excel picks up the encoding when double-clicking the file
+    return io.BytesIO(buffer.getvalue().encode('utf-8-sig')), 'text/csv', 'csv'
+
+
+def _items_xlsx(headers, rows):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Items'
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for row in rows:
+        ws.append(row)
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = ws.dimensions
+    for col_idx, header in enumerate(headers, start=1):
+        longest = max([len(str(header))] + [len(str(row[col_idx - 1])) for row in rows] or [0])
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max(longest + 2, 10), 60)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return (buffer,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xlsx')
+
+
+def _items_pdf(headers, rows):
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+
+    styles = getSampleStyleSheet()
+    cell_style = ParagraphStyle('cell', parent=styles['BodyText'], fontSize=8,
+                                leading=10, alignment=TA_LEFT)
+    head_style = ParagraphStyle('cellhead', parent=cell_style, fontName='Helvetica-Bold',
+                                textColor=colors.white)
+
+    data = [[Paragraph(str(h), head_style) for h in headers]]
+    data += [[Paragraph(str(value), cell_style) for value in row] for row in rows]
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+                            leftMargin=12 * mm, rightMargin=12 * mm,
+                            topMargin=12 * mm, bottomMargin=12 * mm,
+                            title='MISC Booking — Items')
+
+    table = Table(data, repeatRows=1,
+                  colWidths=[12 * mm, 56 * mm, 28 * mm, 18 * mm, 20 * mm, 66 * mm, 56 * mm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND',   (0, 0), (-1, 0), colors.HexColor('#343a40')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f2f2f2')]),
+        ('GRID',         (0, 0), (-1, -1), 0.25, colors.HexColor('#b0b0b0')),
+        ('VALIGN',       (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING',   (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+
+    story = [
+        Paragraph('MISC Booking — Items', styles['Heading2']),
+        Paragraph(f'{len(rows)} item(s) — generated {datetime.now().strftime("%Y-%m-%d %H:%M")}',
+                  styles['Normal']),
+        Spacer(1, 6 * mm),
+        table,
+    ]
+    doc.build(story)
+    buffer.seek(0)
+    return buffer, 'application/pdf', 'pdf'
+
+
+ITEM_EXPORT_BUILDERS = {
+    'csv':  _items_csv,
+    'xlsx': _items_xlsx,
+    'pdf':  _items_pdf,
+}
+
+
+@app.route('/admin/export_items')
+@admin_required
+def export_items():
+    """Download the full item list as CSV, XLSX or PDF."""
+    fmt = (request.args.get('format') or 'csv').lower()
+    if fmt in ('xls', 'excel'):
+        fmt = 'xlsx'
+    builder = ITEM_EXPORT_BUILDERS.get(fmt)
+    if builder is None:
+        flash(f'Unsupported export format: {fmt}', 'danger')
+        return redirect(url_for('admin_dashboard', section='items'))
+
+    rows = _item_export_rows()
+    try:
+        buffer, mimetype, extension = builder(ITEM_EXPORT_HEADERS, rows)
+    except ImportError:
+        missing = 'openpyxl' if fmt == 'xlsx' else 'reportlab'
+        flash(f'{fmt.upper()} export needs the "{missing}" package — run '
+              f'"pip install -r requirements.txt" on the server.', 'danger')
+        return redirect(url_for('admin_dashboard', section='items'))
+
+    filename = f'misc_items_{datetime.now().strftime("%Y%m%d")}.{extension}'
+    return send_file(buffer, mimetype=mimetype, as_attachment=True, download_name=filename)
 
 
 @app.route('/locations')
@@ -1199,6 +1471,7 @@ def booking_detail_json(booking_id):
         "note":           booking.note or '',
         "status":         booking.status,
         "items":          items,
+        "approve_url":    url_for('approve_booking', booking_id=booking.id),
         "lend_url":       url_for('lend_item',   booking_id=booking.id),
         "return_url":     url_for('return_item', booking_id=booking.id),
     })
@@ -1225,7 +1498,10 @@ def check_and_send_reminders_tomorrow():
         tomorrow    = today + timedelta(days=1)
 
         # Query for bookings that are due today or tomorrow
-        due_bookings = Booking.query.filter((Booking.return_date == today) | (Booking.return_date == tomorrow)).all()
+        due_bookings = Booking.query.filter(
+            (Booking.return_date == today) | (Booking.return_date == tomorrow),
+            Booking.status.in_(ACTIVE_STATUSES),
+        ).all()
         
         # Group bookings and items by borrower
         borrower_data = defaultdict(lambda: {'bookings': [], 'items': []})
@@ -1309,8 +1585,19 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
                                     bookings        = items,
                                     note            = kargs['note'])
 
+    elif type_of_mail == 'approved':
+        plain_text_content = "Your booking has been approved. The item(s) are reserved for you — please collect them from MISC on the borrow date."
+        html_content = render_template('email_approved.html',
+                                    borrower_name   = borrower_name,
+                                    borrower_email  = borrower_email,
+                                    borrower_phone  = borrower_phone,
+                                    borrow_date     = borrow_date,
+                                    return_date     = return_date,
+                                    now             = datetime.now(),
+                                    items           = items)
+
     elif type_of_mail == 'lent':
-        plain_text_content = "Your item(s) have been approved and handed over. Please return them by the agreed date."
+        plain_text_content = "Your item(s) have been handed over. Please return them by the agreed date."
         html_content = render_template('email_lent.html',
                                     borrower_name   = borrower_name,
                                     borrower_email  = borrower_email,
@@ -1413,6 +1700,23 @@ def admin_dashboard():
     elif section == 'items':
         data['items'] = Item.query.order_by(Item.name).all()
         data['locations'] = Location.query.order_by(Location.name).all()
+    elif section == 'history':
+        # Full booking log: every booking ever made, including terminal ones.
+        # Optional ?status= filter; 'all' (or absent) shows everything.
+        status_filter = request.args.get('status', 'all')
+        query = Booking.query
+        if status_filter in ALL_STATUSES:
+            query = query.filter(Booking.status == status_filter)
+            data['status_filter'] = status_filter
+        else:
+            data['status_filter'] = 'all'
+        data['history']       = query.order_by(Booking.id.desc()).all()
+        data['all_statuses']  = ALL_STATUSES
+        data['status_counts'] = dict(
+            db.session.query(Booking.status, db.func.count(Booking.id))
+                      .group_by(Booking.status).all()
+        )
+        data['total_bookings'] = Booking.query.count()
     return render_template('admin_dashboard.html', **data)
 
 
@@ -1567,10 +1871,11 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dev', help="development mode enabled", default=False, action="store_true")      # development mode
     args = parser.parse_args()
 
+    # -d forces development mode on. Without it, keep whatever MISC_DEV already
+    # decided at import time — overwriting LOCALHOST here would contradict the
+    # module-level setup (scheduler, APPLICATION_ROOT) that ran against that value.
     if args.dev:
-        LOCALHOST = True  # Only affects app.run() below; for gunicorn use MISC_DEV=true env var
-    else:
-        LOCALHOST = False
+        LOCALHOST = True
 
     create_admin_user()
     create_default_locations()
@@ -1582,10 +1887,13 @@ if __name__ == '__main__':
             # Run the Flask app (this is a blocking call)
             app.run(debug=True, host='0.0.0.0', use_reloader=True)
         except (KeyboardInterrupt, SystemExit):
-            # Shut down the scheduler when exiting the app
-            scheduler.shutdown() 
+            # Shut down the scheduler when exiting the app. It only exists when the
+            # module-level `if not LOCALHOST` block ran, and a failed app.run() lands
+            # here too — so guard it, or the real error gets masked by a NameError.
+            if 'scheduler' in globals():
+                scheduler.shutdown()
 
     else:
-        # Using 127.0.0.1 instead of 0.0.0.0 to avoid port overlap with airPlay
+        # Port 5006: macOS AirPlay Receiver (ControlCenter) occupies the Flask default 5000
         app.run(debug=True, host='0.0.0.0', port=5006, use_reloader=True)
     

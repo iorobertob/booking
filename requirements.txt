@@ -9,4 +9,5 @@ Flask-Migrate
 python-dotenv
 APScheduler
 msal
-
+openpyxl
+reportlab

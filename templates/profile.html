@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 
+{% from 'macros.html' import status_badge %}
+
 {% block content %}
 
 <div class="row">
@@ -64,14 +66,7 @@
             <td>{{ b.borrow_date.strftime('%Y-%m-%d') if b.borrow_date else '' }}</td>
             <td>{{ b.booking_items | length if b.booking_items else 1 }}</td>
             <td>{{ b.note or '' }}</td>
-            <td>
-                <span class="badge
-                    {% if b.status == 'booked' %}bg-warning text-dark
-                    {% elif b.status == 'lent' %}bg-primary
-                    {% else %}bg-secondary{% endif %}">
-                    {{ b.status }}
-                </span>
-            </td>
+            <td>{{ status_badge(b.status) }}</td>
         </tr>
         {% endfor %}
     </tbody>

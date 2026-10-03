@@ -20,6 +20,50 @@ let set_borrower_url = "";
 let  returnDatePickerRaw = null;
 let  returnDatePickers   = null;
 
+/* Longest booking allowed for the item(s) currently being booked, in days counted
+   inclusively (borrow Mon → return the following Mon = 8). When several items are
+   booked together the strictest cap wins. null = unknown, so no limit is applied. */
+let maxBookingDays = null;
+
+/**
+ * Set the active booking-length cap from a list of item objects.
+ * Items without a max_booking_days fall back to the 8-day default.
+ * @param {Array<Object>|Object} itemsArg
+ */
+function setMaxBookingDays(itemsArg){
+    const arr = Array.isArray(itemsArg) ? itemsArg : [itemsArg];
+    const caps = arr
+        .map(i => parseInt(i && i.max_booking_days, 10))
+        .filter(n => Number.isFinite(n) && n > 0);
+    maxBookingDays = caps.length ? Math.min(...caps) : null;
+    renderMaxBookingHint();
+    return maxBookingDays;
+}
+
+/**
+ * Last date selectable for a booking that starts on borrowDateStr, as YYYY-MM-DD.
+ * Returns null when no cap is known.
+ * @param {string} borrowDateStr - YYYY-MM-DD
+ */
+function maxReturnDateFor(borrowDateStr){
+    if (!maxBookingDays || !borrowDateStr) return null;
+    const d = new Date(borrowDateStr + 'T00:00:00');
+    if (isNaN(d)) return null;
+    // Inclusive counting: a 8-day cap allows borrow + 7 further days.
+    d.setDate(d.getDate() + maxBookingDays - 1);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Show the active cap next to the return-date field, if the page has a slot for it. */
+function renderMaxBookingHint(){
+    document.querySelectorAll('.max-booking-hint').forEach(el => {
+        el.textContent = maxBookingDays
+            ? `Max ${maxBookingDays} days for this selection.`
+            : '';
+    });
+}
+
 /**
  * Initializes the FullCalendar instance and renders booked dates and date selections.
  * 
@@ -99,6 +143,12 @@ function setupCalendar(booking_dates){
             today.setHours(0, 0, 0, 0);
             if (start < today) return false;
 
+            // Block selections longer than the item's cap. FullCalendar's `end` is
+            // exclusive, so the day count is the plain difference.
+            if (maxBookingDays) {
+                const days = Math.round((end - start) / 86400000);
+                if (days > maxBookingDays) return false;
+            }
 
             return !isOverlap; // If there is an overlap, disallow selection
         },
@@ -211,6 +261,14 @@ function initDatePickers(){
         items           = JSON.parse(document.getElementById("itemsJSON").value);
     }
 
+    // Derive the booking-length cap. data.item_for_cart covers the item detail and
+    // cart pages; the bulk flow on home calls setMaxBookingDays() itself with the
+    // full item records from /bulk_details.
+    if (data.item_for_cart != null){
+        try { setMaxBookingDays(JSON.parse(data.item_for_cart || '[]')); }
+        catch (e) { console.warn('Could not read max_booking_days:', e); }
+    }
+
     // Disable dates before today on flatpickr calendar drop down menu
     returnDatePickerRaw = flatpickr(".datepicker", {
         "disable": [
@@ -241,10 +299,8 @@ function initDatePickers(){
         ],
         "dateFormat": "Y-m-d",
         onChange: function(selectedDates, dateStr, instance) {
-            // Update the minDate for the return date picker
-            returnDatePickers.forEach(instance => {
-                instance.set("minDate", dateStr);
-            });
+            // Update the min/max window for the return date picker
+            updateReturnDatePickerMinDate(dateStr);
         }
     }); 
 }
@@ -254,8 +310,11 @@ function initDatePickers(){
  * @param {string} dateStr - The new minimum return date in YYYY-MM-DD format.
  */
 function updateReturnDatePickerMinDate(dateStr) {
+    const maxDate = maxReturnDateFor(dateStr);
     returnDatePickers.forEach(instance => {
         instance.set("minDate", dateStr);
+        // Clearing with null removes any cap left over from a previous selection.
+        instance.set("maxDate", maxDate);
     });
 }
 
@@ -449,6 +508,24 @@ async function submitForm(actionType, form) {
         if (!returnDateField || !returnDateField.value.trim()) {
             returnDateField?.focus();
             return false;
+        }
+    }
+
+    // Enforce the booking-length cap before submitting. The server re-checks this;
+    // this is only so the user is told immediately instead of after a round trip.
+    if (maxBookingDays && borrowDateField && returnDateField
+        && borrowDateField.value.trim() && returnDateField.value.trim()) {
+        const start = new Date(borrowDateField.value.trim() + 'T00:00:00');
+        const end   = new Date(returnDateField.value.trim() + 'T00:00:00');
+        if (!isNaN(start) && !isNaN(end)) {
+            const days = Math.round((end - start) / 86400000) + 1;  // inclusive
+            if (days > maxBookingDays) {
+                returnDateField.setCustomValidity(
+                    `This booking is ${days} days. The maximum is ${maxBookingDays} days.`);
+                returnDateField.reportValidity();
+                setTimeout(() => returnDateField.setCustomValidity(''), 0);
+                return false;
+            }
         }
     }
     

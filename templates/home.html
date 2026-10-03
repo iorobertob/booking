@@ -36,7 +36,7 @@
         </thead>
         <tbody>
             {% for item in items %}
-                <tr{% if item.is_bookable is false %} class="table-secondary"{% endif %}>
+                <tr{% if item.is_bookable is false %} class="item-not-bookable"{% endif %}>
                     <td><input class="form-check-input item-checkbox" type="checkbox" value="{{item.id}}" id="checkbox_{{item.id}}"{% if item.is_bookable is false %} disabled{% endif %}></td>
                     <td class="clickable-cell">
                       <a href="{{url_for('item_details',item_id=item.id)}}" style="display: block; width: 100%; height: 100%;">
@@ -144,8 +144,11 @@ data-action_book   = "{{ url_for('book') }}"></script>
 
             setBorrowerUrl("{{url_for('set_borrower')}}");
             
+            // Strictest cap across the selected items, before the pickers are built
+            setMaxBookingDays(result.items);
+
             updateJSON(form, result.items);
-            
+
             updateBookedDates(form, result.booked_dates);
 
             initDatePickers();

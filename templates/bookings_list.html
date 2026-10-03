@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 
+{% from 'macros.html' import status_badge %}
+
 {% block content %}
 
 <div class="header">
@@ -44,11 +46,15 @@
                     {{ booking.user_email}}
                 </td>
                 <td>{{ booking.borrower_phone }}</td>
-                <td>{{ booking.status }}</td>
+                <td>{{ status_badge(booking.status) }}</td>
                 <td>{{ booking.note or '' }}</td>
                 {% if current_user.is_admin %}
                     <td>
                     {% if booking.status == 'booked' and current_user.is_admin %}
+                        | <a href="{{ url_for('approve_booking', booking_id=booking.id) }}">Approve</a>
+                        | <a href="{{ url_for('lend_item', booking_id=booking.id) }}">Mark as Lent</a>
+                        | <a href="javascript:void(0);" onclick="showDenyModal({{booking.id}})" >Deny  Booking</a>
+                    {% elif booking.status == 'approved' and current_user.is_admin %}
                         | <a href="{{ url_for('lend_item', booking_id=booking.id) }}">Mark as Lent</a>
                         | <a href="javascript:void(0);" onclick="showDenyModal({{booking.id}})" >Deny  Booking</a>
                     {% elif booking.status == 'booked' and current_user.is_authenticated == False %}

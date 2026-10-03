@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 
+{% from 'macros.html' import status_badge %}
+
 {% block content %}
 
 {% set admin_dash_next = url_for('admin_dashboard', section='locations') %}
@@ -29,6 +31,8 @@
                href="{{ url_for('admin_dashboard', section='programmes') }}">Programmes</a>
             <a class="nav-link {% if section == 'items' %}fw-bold{% endif %}"
                href="{{ url_for('admin_dashboard', section='items') }}">Items</a>
+            <a class="nav-link {% if section == 'history' %}fw-bold{% endif %}"
+               href="{{ url_for('admin_dashboard', section='history') }}">History</a>
         </nav>
     </div>
 </div>
@@ -49,6 +53,8 @@
                    href="{{ url_for('admin_dashboard', section='programmes') }}">Programmes</a>
                 <a class="nav-link {% if section == 'items' %}fw-bold text-primary{% endif %}"
                    href="{{ url_for('admin_dashboard', section='items') }}">Items</a>
+                <a class="nav-link {% if section == 'history' %}fw-bold text-primary{% endif %}"
+                   href="{{ url_for('admin_dashboard', section='history') }}">History</a>
             </nav>
         </div>
     </div>
@@ -70,7 +76,7 @@
                     <th>Note</th>
                     <th>Status</th>
                     <th>Items</th>
-                    <th>Actions</th>
+                    <th class="booking-actions">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -81,19 +87,22 @@
                     <td>{{ booking.borrower_name }}</td>
                     <td>{{ booking.borrower_email }}</td>
                     <td>{{ booking.note or '' }}</td>
-                    <td>
-                        <span class="badge
-                            {% if booking.status == 'booked' %}bg-warning text-dark
-                            {% elif booking.status == 'lent' %}bg-primary
-                            {% else %}bg-secondary{% endif %}">
-                            {{ booking.status }}
-                        </span>
-                    </td>
+                    <td>{{ status_badge(booking.status) }}</td>
                     <td>{{ booking.booking_items | length if booking.booking_items else 1 }}</td>
-                    <td onclick="event.stopPropagation()">
+                    <td class="booking-actions" onclick="event.stopPropagation()">
+                        <div class="actions-stack">
                         {% if booking.status == 'booked' %}
+                            <a href="{{ url_for('approve_booking', booking_id=booking.id) }}"
+                               class="btn btn-info btn-sm"
+                               onclick="event.stopPropagation()">Approve</a>
                             <a href="{{ url_for('lend_item', booking_id=booking.id) }}"
-                               class="btn btn-success btn-sm me-1"
+                               class="btn btn-success btn-sm"
+                               onclick="event.stopPropagation()">Mark as Lent</a>
+                            <button class="btn btn-danger btn-sm"
+                                    onclick="event.stopPropagation(); openDenyModal({{ booking.id }})">Deny</button>
+                        {% elif booking.status == 'approved' %}
+                            <a href="{{ url_for('lend_item', booking_id=booking.id) }}"
+                               class="btn btn-success btn-sm"
                                onclick="event.stopPropagation()">Mark as Lent</a>
                             <button class="btn btn-danger btn-sm"
                                     onclick="event.stopPropagation(); openDenyModal({{ booking.id }})">Deny</button>
@@ -102,6 +111,7 @@
                                class="btn btn-secondary btn-sm"
                                onclick="event.stopPropagation()">Mark as Returned</a>
                         {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -175,7 +185,7 @@
                         document.getElementById('modal-note').textContent           = data.note || '';
                         var statusEl = document.getElementById('modal-status');
                         statusEl.textContent = data.status;
-                        statusEl.className = 'badge ' + (data.status === 'booked' ? 'bg-warning text-dark' : data.status === 'lent' ? 'bg-primary' : 'bg-secondary');
+                        statusEl.className = 'badge ' + statusBadgeClass(data.status);
                         var tbody = document.getElementById('modal-items-body');
                         tbody.innerHTML = '';
                         data.items.forEach(function(item) {
@@ -186,6 +196,8 @@
                         var actionsEl = document.getElementById('modal-actions');
                         actionsEl.innerHTML = '';
                         if (data.status === 'booked') {
+                            actionsEl.innerHTML = '<a href="' + data.approve_url + '" class="btn btn-info btn-sm me-2">Approve</a><a href="' + data.lend_url + '" class="btn btn-success btn-sm me-2">Mark as Lent</a><button class="btn btn-danger btn-sm" onclick="openDenyModal(' + data.id + ')">Deny</button>';
+                        } else if (data.status === 'approved') {
                             actionsEl.innerHTML = '<a href="' + data.lend_url + '" class="btn btn-success btn-sm me-2">Mark as Lent</a><button class="btn btn-danger btn-sm" onclick="openDenyModal(' + data.id + ')">Deny</button>';
                         } else if (data.status === 'lent') {
                             actionsEl.innerHTML = '<a href="' + data.return_url + '" class="btn btn-secondary btn-sm">Mark as Returned</a>';
@@ -413,7 +425,23 @@
 
         {# ── ITEMS ─────────────────────────────────────────────────── #}
         {% elif section == 'items' %}
-        <h4 class="mb-3">Items</h4>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h4 class="mb-0">Items</h4>
+            <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle" type="button"
+                        id="exportItemsBtn" data-bs-toggle="dropdown" aria-expanded="false">
+                    &#8681; Export items
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportItemsBtn">
+                    <li><a class="dropdown-item"
+                           href="{{ url_for('export_items', format='csv') }}">CSV (.csv)</a></li>
+                    <li><a class="dropdown-item"
+                           href="{{ url_for('export_items', format='xlsx') }}">Excel (.xlsx)</a></li>
+                    <li><a class="dropdown-item"
+                           href="{{ url_for('export_items', format='pdf') }}">PDF (.pdf)</a></li>
+                </ul>
+            </div>
+        </div>
 
         <div class="card mb-4">
             <div class="card-header">Add Item</div>
@@ -431,7 +459,11 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3 d-flex align-items-center gap-2">
+                    <div class="col-md-2">
+                        <input type="number" name="max_booking_days" class="form-control"
+                               min="1" value="8" title="Max booking length in days" placeholder="Max days">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-center gap-2">
                         <input type="checkbox" name="is_bookable" id="new_is_bookable" class="form-check-input" checked>
                         <label for="new_is_bookable" class="form-check-label">Bookable</label>
                     </div>
@@ -449,6 +481,7 @@
                     <th>#</th>
                     <th>Name</th>
                     <th>Location</th>
+                    <th>Max days</th>
                     <th>Bookable</th>
                     <th style="white-space:nowrap; width:1%;">Actions</th>
                 </tr>
@@ -459,6 +492,7 @@
                     <td>{{ item.id }}</td>
                     <td>{{ item.name }}</td>
                     <td>{{ item.location or '' }}</td>
+                    <td>{{ item.max_booking_days or 8 }}</td>
                     <td>{{ 'Yes' if item.is_bookable else 'No' }}</td>
                     <td style="white-space:nowrap; width:1%;">
                         <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
@@ -477,6 +511,79 @@
         <script>
         $(document).ready(function() {
             $('#itemsTable').DataTable({ order: [[1,'asc']], responsive: true });
+        });
+        </script>
+
+        {# ── HISTORY ───────────────────────────────────────────────────── #}
+        {% elif section == 'history' %}
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h4 class="mb-0">Booking History</h4>
+            <span class="text-muted small">{{ total_bookings }} booking(s) on record</span>
+        </div>
+
+        <div class="mb-3 d-flex flex-wrap gap-2">
+            <a href="{{ url_for('admin_dashboard', section='history') }}"
+               class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                All <span class="badge bg-light text-dark ms-1">{{ total_bookings }}</span>
+            </a>
+            {% for st in all_statuses %}
+            <a href="{{ url_for('admin_dashboard', section='history', status=st) }}"
+               class="btn btn-sm {% if status_filter == st %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                {{ st }} <span class="badge bg-light text-dark ms-1">{{ status_counts.get(st, 0) }}</span>
+            </a>
+            {% endfor %}
+        </div>
+
+        <div class="table-responsive">
+        <table id="historyTable" class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Requested</th>
+                    <th>Borrower</th>
+                    <th>Email</th>
+                    <th>Items</th>
+                    <th>Borrow</th>
+                    <th>Return</th>
+                    <th>Status</th>
+                    <th>Last change</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in history %}
+                <tr>
+                    <td>{{ b.id }}</td>
+                    <td data-order="{{ b.created_at.isoformat() if b.created_at else '' }}">
+                        {{ b.created_at.strftime('%Y-%m-%d %H:%M') if b.created_at else '—' }}
+                    </td>
+                    <td>{{ b.borrower_name }}</td>
+                    <td>{{ b.borrower_email }}</td>
+                    <td>
+                        {% if b.booking_items %}
+                            {% for bi in b.booking_items %}
+                                {{ bi.item_name }}{% if not loop.last %}<br>{% endif %}
+                            {% endfor %}
+                        {% else %}
+                            {{ b.item_name }}
+                        {% endif %}
+                    </td>
+                    <td>{{ b.borrow_date.strftime('%Y-%m-%d') if b.borrow_date else '' }}</td>
+                    <td>{{ b.return_date.strftime('%Y-%m-%d') if b.return_date else '' }}</td>
+                    <td>{{ status_badge(b.status) }}</td>
+                    <td data-order="{{ b.status_changed_at.isoformat() if b.status_changed_at else '' }}">
+                        {{ b.status_changed_at.strftime('%Y-%m-%d %H:%M') if b.status_changed_at else '—' }}
+                    </td>
+                    <td>{{ b.note or '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        <script>
+        $(document).ready(function() {
+            $('#historyTable').DataTable({ order: [[0,'desc']], responsive: true, pageLength: 25 });
         });
         </script>
 

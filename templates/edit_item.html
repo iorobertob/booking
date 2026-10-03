@@ -33,6 +33,13 @@
                 </select>
             </div>
 
+            <div class="mb-3">
+                <label for="max_booking_days" class="form-label">Max booking length (days)</label>
+                <input type="number" id="max_booking_days" name="max_booking_days"
+                       min="1" value="{{ item.max_booking_days or 8 }}" class="form-control">
+                <div class="form-text">Counted inclusively — borrow Mon to return the following Mon is 8 days.</div>
+            </div>
+
             <div class="mb-3 form-check">
                 <input type="checkbox" id="is_bookable" name="is_bookable"
                        {% if item.is_bookable is not false %}checked{% endif %}
