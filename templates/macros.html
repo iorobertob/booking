@@ -18,13 +18,13 @@
                 {% if not show_add_to_cart  %}
 
                 <label for="borrower_name">Your Name:</label>
-                <input type="text" id="borrower_name" name="borrower_name" required><br>
+                <input type="text" id="borrower_name" name="borrower_name" autocomplete="name" required><br>
                 <label for="borrower_email">Your Email:</label>
 
-                <input type="email" id="borrower_email" name="borrower_email" required><br>
+                <input type="email" id="borrower_email" name="borrower_email" autocomplete="email" required><br>
 
                 <label for="borrower_phone">Your Phone</label>
-                <input type="tel" id="borrower_phone" name="borrower_phone" required><br>
+                <input type="tel" id="borrower_phone" name="borrower_phone" autocomplete="tel" required><br>
 
                 {% endif %}
 

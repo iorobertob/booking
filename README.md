@@ -508,12 +508,26 @@ sudo systemctl restart booking.service
 * Decide whether to send reminder emails to admins.
 * Bulk delete items by checkbox.
 * Add a Booking Log — DONE (v3.4: admin dashboard → History)
+* iCloud Passwords / console errors on dynamically created modals — addressed in v3.5.1 via `autocomplete` attributes; re-check if prompts reappear
 * Add possibility to return items individually that were bulk booked/lent.
 * Add a reminder in the return email to take a photo of where the item was left. (integrate on the phone)
 
 ---
 
 ## Changelog
+
+### v3.5.1 — 2026-10-03
+- **Password-manager autofill fix**: no template carried a single `autocomplete` attribute, so macOS
+  Passwords/iCloud Keychain fell back to heuristics. The "Add Local User" form in the dashboard Users
+  section is shaped exactly like a sign-in form (a `username` text input plus a `password` input), so the
+  manager treated it as one and offered to *update* the saved `lmta.lt` credential while an admin was on
+  `misc.lmta.lt/booking`. Explicit hints added:
+  - `login.html`: `autocomplete="username"` / `current-password` — this is the real sign-in form.
+  - Add Local User: `autocomplete="off"` on the form and username, `new-password` on the password, so the
+    manager neither autofills an existing credential nor offers to update one.
+  - Booking modal borrower fields: `name` / `email` / `tel`. Profile: `given-name` / `family-name` / `tel`.
+- Addresses the long-standing note "iCloud passwords cannot deal with dynamically created modals" that
+  was dropped from the TODO list in an earlier README rewrite.
 
 ### v3.5 — 2026-10-03
 - **Admin notification recipients are now managed in the UI**, not hardcoded. The Users section of the
