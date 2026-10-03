@@ -141,6 +141,9 @@ Registered user (local account or MS SSO auto-created).
 | `is_admin` | Boolean | Grants access to all admin routes |
 | `first_name` | String(50) | |
 | `last_name` | String(50) | |
+| `phone` | String(30) | |
+| `course` | String(200) | Study programme (datalist from `Programme`) |
+| `receives_admin_emails` | Boolean | Default `True`. Whether this admin is copied on booking notifications. Toggled per admin in the dashboard Users section; ignored for non-admins |
 
 ---
 
@@ -197,6 +200,7 @@ All admin routes require the user to be authenticated and have `is_admin = True`
 | GET/POST | `/add_item` | Add new item (Tailwind form with location dropdown) |
 | GET/POST | `/edit_item/<item_id>` | Edit existing item (Tailwind form with location dropdown pre-selected) |
 | POST | `/delete_item/<item_id>` | Delete item |
+| POST | `/admin/toggle_admin_emails/<user_id>` | **New in v3.5**: subscribe/unsubscribe an admin from booking notification emails |
 | GET | `/admin_dashboard?section=history[&status=…]` | **New in v3.4**: full booking log — every booking ever made, including returned/denied, with per-status filter chips and counts |
 | GET | `/admin/export_items?format=csv\|xlsx\|pdf` | Download the full item list as a file (`csv` default; `xls`/`excel` are accepted aliases for `xlsx`). Triggered by the **Export items** dropdown in the Items section of the admin dashboard. Columns: ID, Name, Location, Bookable, Manual Link, Photo Path |
 
@@ -310,6 +314,11 @@ A full lifecycle sends **four** emails (was three before v3.3):
 
 Denial replaces steps 2–4 with a single `deny` email (or none at all when the admin uses
 `deny_no_note`). The daily return reminder is independent of this sequence.
+
+> **Who counts as an admin recipient** (since v3.5): any `User` with `is_admin = True`,
+> `receives_admin_emails = True` and a deliverable address, resolved by `admin_notification_contacts()`.
+> Toggle it per admin in the dashboard Users section. In development (`MISC_DEV`) all admin mail is
+> redirected to `DEV_ADMIN_CONTACTS` instead.
 
 Email templates receive: `borrower_name`, `borrower_email`, `borrower_phone`, `borrow_date`, `return_date`, `items` (list of `BookingItem` or `Booking` objects), `now`.
 
@@ -426,6 +435,7 @@ mysql -u <db_user> -p <db_name> < vars/booking_dump_<timestamp>.sql
 | Initial | `booking`, `item`, `user` tables |
 | v2.1 | `booking.note`, `item.is_bookable` columns |
 | v3.4 (`b11084c2f89c`) | `item.max_booking_days` (server_default `8`), `booking.created_at`, `booking.status_changed_at` |
+| v3.5 (`e9a4b86a213f`) | `user.receives_admin_emails` (server_default `1`) |
 | v3.0 | `booking_item` table, `location` table |
 
 After deploying v3.0 for the first time, run:
@@ -504,6 +514,28 @@ sudo systemctl restart booking.service
 ---
 
 ## Changelog
+
+### v3.5 — 2026-10-03
+- **Admin notification recipients are now managed in the UI**, not hardcoded. The Users section of the
+  admin dashboard gains an **Admin emails** column with a per-admin On/Off toggle
+  (`/admin/toggle_admin_emails/<user_id>`), backed by `User.receives_admin_emails`.
+- **Removed two hardcoded contact lists** that had already drifted apart — one in `book()` (with Julius
+  and Mantautas commented out) and one in `send_email()` (with them active), so who got copied depended
+  on which email was being sent. Both now call a single `admin_notification_contacts()`.
+- Recipients are admins with `receives_admin_emails = True` **and a deliverable address**. Accounts like
+  `admin` (no email) or `dummy` (invalid email) are skipped rather than handed to the mailer; the Users
+  table flags such an account with a "no email" badge. Addresses are de-duplicated.
+- **`seed_admin_notification_contacts()`** creates an admin `User` for anyone on the old hardcoded list
+  who has no account yet, so nobody silently stops receiving notifications. It is idempotent, matches
+  existing users on email or username, never modifies them, and gives new accounts an unusable random
+  password (these people sign in via Microsoft SSO). It runs from `__main__` and from `migrate.sh`,
+  since gunicorn never executes `__main__`. `LEGACY_ADMIN_CONTACTS` in `main.py` is only this seed list —
+  after the first run, recipients are edited in the UI.
+- Development behaviour is unchanged: when `MISC_DEV` is set, all admin email is still redirected to
+  `DEV_ADMIN_CONTACTS` so local testing never mails the team.
+- If no admin is subscribed, the app logs a warning and sends no admin email rather than falling back to
+  the seed list — an admin who switches everyone off is obeyed.
+- **DB migration required**: `e9a4b86a213f`.
 
 ### v3.4 — 2026-10-03
 - **Tidier action buttons in the admin booking tables**: the Actions cell had no layout, so buttons

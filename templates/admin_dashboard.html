@@ -251,6 +251,7 @@
                     <th>Name</th>
                     <th>Course</th>
                     <th style="white-space:nowrap; width:1%;">Admin</th>
+                    <th style="white-space:nowrap; width:1%;">Admin&nbsp;emails</th>
                     <th style="white-space:nowrap; width:1%;">Actions</th>
                 </tr>
             </thead>
@@ -267,6 +268,24 @@
                                 {{ 'Yes' if u.is_admin else 'No' }}
                             </button>
                         </form>
+                    </td>
+                    <td style="white-space:nowrap; width:1%;">
+                        {% if u.is_admin %}
+                        <form style="display:contents;" method="post"
+                              action="{{ url_for('admin_toggle_admin_emails', user_id=u.id) }}">
+                            <button type="submit"
+                                    class="btn btn-sm {% if u.receives_admin_emails %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                                    title="{% if u.receives_admin_emails %}Receives booking notifications — click to unsubscribe{% else %}Not receiving booking notifications — click to subscribe{% endif %}">
+                                {{ 'On' if u.receives_admin_emails else 'Off' }}
+                            </button>
+                        </form>
+                        {% if u.receives_admin_emails and not u.notification_email %}
+                        <span class="badge bg-warning text-dark ms-1"
+                              title="Subscribed, but this account has no valid email address, so nothing can be delivered.">no email</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
                     </td>
                     <td style="white-space:nowrap; width:1%;">
                         {% if u.id != current_user.id %}

@@ -151,6 +151,16 @@ info "Seeding default locations (A, B, C) if not already present..."
 
 run python -c '"from main import app, create_default_locations; create_default_locations()"'
 
+# ── Seed admin notification contacts ───────────────────────────────────────
+echo ""
+info "Seeding admin notification contacts (previously hardcoded in main.py)..."
+
+run python -c '"from main import seed_admin_notification_contacts; seed_admin_notification_contacts()"'
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Admin notification contacts seeded."
+fi
+
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Locations seeded."
 fi

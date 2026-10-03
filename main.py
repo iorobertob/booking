@@ -239,6 +239,28 @@ class User(UserMixin, db.Model):
     last_name   = db.Column(db.String(50),  nullable=True)
     phone       = db.Column(db.String(30),  nullable=True)
     course      = db.Column(db.String(200), nullable=True)
+    # Whether this admin is copied on booking notifications. Toggled per admin in
+    # the dashboard Users section; ignored for non-admins.
+    receives_admin_emails = db.Column(db.Boolean, default=True, nullable=False,
+                                      server_default='1')
+
+    @property
+    def notification_email(self):
+        """Deliverable address for this user, or None.
+
+        Local accounts often carry the address in `username` rather than `email`
+        (see _borrower_info_for_user), and seeded accounts like 'admin'/'dummy'
+        have no valid address at all — those must never reach the mailer.
+        """
+        for candidate in (self.email, self.username):
+            if candidate and _EMAIL_RE.match(candidate.strip()):
+                return candidate.strip().lower()
+        return None
+
+    @property
+    def display_name(self):
+        name = f"{self.first_name or ''} {self.last_name or ''}".strip()
+        return name or (self.username or '')
 
 
 class Programme(db.Model):
@@ -267,6 +289,89 @@ def create_default_locations():
         for name in ['A', 'B', 'C']:
             if not Location.query.filter_by(name=name).first():
                 db.session.add(Location(name=name))
+        db.session.commit()
+
+
+# ── Admin notification recipients ─────────────────────────────────────────────
+# Who gets copied on booking notifications. This used to be two hardcoded lists
+# (one in book(), one in send_email()) that had already drifted apart. It is now
+# driven by the User table: any admin with receives_admin_emails = True and a
+# deliverable address. Toggle it per admin in the dashboard Users section.
+#
+# LEGACY_ADMIN_CONTACTS is only a seed: on first run after this change,
+# seed_admin_notification_contacts() creates an admin User for anyone on it who
+# is not in the database yet, so nobody silently stops receiving notifications.
+# After that it is unused — edit recipients in the UI, not here.
+LEGACY_ADMIN_CONTACTS = [
+    {"name": "Edvinas",       "email": "edvinas.siliunas@lmta.lt"},
+    {"name": "Edvinas Gmail", "email": "siliunas.edvinas@gmail.com"},
+    {"name": "Roberto",       "email": "roberto.becerra@lmta.lt"},
+    {"name": "Julius",        "email": "julius.aglinskas@lmta.lt"},
+    {"name": "Mantautas",     "email": "mantautas.krukauskas@lmta.lt"},
+]
+
+# In development every admin email is redirected here, so local testing never
+# mails the real team. Unchanged from the previous DEV_ADMIN_CONTACTS behaviour.
+DEV_ADMIN_CONTACTS = [
+    {"name": "Roberto", "email": "roberto.becerra@lmta.lt"},
+]
+
+
+def admin_notification_contacts():
+    """Admins currently subscribed to booking notifications.
+
+    Returns a list of {"name", "email"} dicts, de-duplicated by address.
+    Admins without a deliverable address are skipped — 'admin' and 'dummy' style
+    accounts would otherwise be handed to the mailer as invalid recipients.
+    """
+    if LOCALHOST:
+        return list(DEV_ADMIN_CONTACTS)
+
+    contacts, seen = [], set()
+    for user in User.query.filter_by(is_admin=True, receives_admin_emails=True).all():
+        email = user.notification_email
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        contacts.append({"name": user.display_name or email, "email": email})
+
+    if not contacts:
+        # Deliberate: respect an admin who switched everyone off rather than
+        # resurrecting the seed list behind their back. Loud so it is diagnosable.
+        logger.warning("No admin is subscribed to booking notifications — "
+                       "admin emails will not be sent.")
+    return contacts
+
+
+def seed_admin_notification_contacts():
+    """Make sure the previously hardcoded recipients still exist as admin users.
+
+    Without this, switching from the hardcoded list to the User table would
+    silently drop anyone who never had an account. Accounts are created with an
+    unusable random password — these people sign in via Microsoft SSO.
+    Existing users are matched on email or username and are never modified.
+    """
+    with app.app_context():
+        for contact in LEGACY_ADMIN_CONTACTS:
+            email = contact["email"].lower()
+            existing = User.query.filter(
+                db.or_(db.func.lower(User.email) == email,
+                       db.func.lower(User.username) == email)
+            ).first()
+            if existing:
+                continue
+            db.session.add(User(
+                username   = email,
+                email      = email,
+                # pbkdf2:sha256 like the SSO path — the default (scrypt) hash is
+                # longer than User.password's String(128) and MySQL rejects it.
+                password   = generate_password_hash(os.urandom(24).hex(),
+                                                    method='pbkdf2:sha256'),
+                is_admin   = True,
+                first_name = contact["name"],
+                receives_admin_emails = True,
+            ))
+            logger.info("Seeded admin notification contact: %s", email)
         db.session.commit()
 
 
@@ -794,16 +899,8 @@ def book():
         recipients     = [{"name": borrower_name, "email": borrower_email}],
     )
 
-    # 2. Send admin notification with Lend / Deny action links
-    DEV_ADMIN_CONTACTS  = [{"name": "Roberto", "email": "roberto.becerra@lmta.lt"}]
-    ALL_ADMIN_CONTACTS  = [
-        {"name": "Edvinas",       "email": "edvinas.siliunas@lmta.lt"},
-        {"name": "Edvinas Gmail", "email": "siliunas.edvinas@gmail.com"},
-        {"name": "Roberto",       "email": "roberto.becerra@lmta.lt"},
-        # {"name": "Julius",        "email": "julius.aglinskas@lmta.lt"},
-        # {"name": "Mantautas",     "email": "mantautas.krukauskas@lmta.lt"},
-    ]
-    admin_contacts = ALL_ADMIN_CONTACTS if not LOCALHOST else DEV_ADMIN_CONTACTS
+    # 2. Send admin notification with Approve / Deny action links
+    admin_contacts = admin_notification_contacts()
     approve_url = url_for('approve_booking', booking_id=new_booking.id, _external=True)
     deny_url    = url_for('deny_booking',    booking_id=new_booking.id, _external=True)
     send_email(
@@ -1621,20 +1718,8 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
     mail_from = "booking@ideas-block.com"
     name_from = "MISC booking - DO NOT Reply"
 
-    # Define all admin contacts 
-    DEV_ADMIN_CONTACTS = [
-        {"name": "Roberto",   "email": "roberto.becerra@lmta.lt"}
-    ]
-    ALL_ADMIN_CONTACTS = [
-        {"name": "Edvinas",         "email": "edvinas.siliunas@lmta.lt"},
-        {"name": "Edvinas Gmail",   "email": "siliunas.edvinas@gmail.com"},
-        {"name": "Roberto",         "email": "roberto.becerra@lmta.lt"},
-        {"name": "Julius",          "email": "julius.aglinskas@lmta.lt"},
-        {"name": "Mantautas",       "email": "mantautas.krukauskas@lmta.lt"},
-    ]
-
-    # Filter admins based on environment
-    admin_contacts = ALL_ADMIN_CONTACTS if not LOCALHOST else DEV_ADMIN_CONTACTS
+    # Admins subscribed to notifications (per-admin toggle in the dashboard)
+    admin_contacts = admin_notification_contacts()
 
     if recipients is not None:
         # Caller supplied explicit recipient list — use it directly
@@ -1769,6 +1854,27 @@ def admin_toggle_admin(user_id):
     return redirect(url_for('admin_dashboard', section='users'))
 
 
+@app.route('/admin/toggle_admin_emails/<int:user_id>', methods=['POST'])
+@admin_required
+def admin_toggle_admin_emails(user_id):
+    """Subscribe/unsubscribe an admin from booking notification emails."""
+    user = User.query.get_or_404(user_id)
+    if not user.is_admin:
+        flash(f'"{user.username}" is not an admin, so they receive no admin emails.', 'warning')
+        return redirect(url_for('admin_dashboard', section='users'))
+
+    user.receives_admin_emails = not user.receives_admin_emails
+    db.session.commit()
+
+    if user.receives_admin_emails and not user.notification_email:
+        flash(f'"{user.username}" is subscribed but has no valid email address, '
+              f'so nothing can be delivered. Add one on their profile.', 'warning')
+    else:
+        flash(f'"{user.username}" {"will now receive" if user.receives_admin_emails else "will no longer receive"} '
+              f'admin notification emails.', 'success')
+    return redirect(url_for('admin_dashboard', section='users'))
+
+
 @app.route('/admin/add_programme', methods=['POST'])
 @admin_required
 def admin_add_programme():
@@ -1880,6 +1986,7 @@ if __name__ == '__main__':
     create_admin_user()
     create_default_locations()
     create_default_programmes()
+    seed_admin_notification_contacts()
 
     if not LOCALHOST:
 
