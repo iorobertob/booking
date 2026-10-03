@@ -470,6 +470,7 @@ sudo systemctl restart booking.service
 ---
 
 ## TODO
+* Add fields to user model to register sign up date and last login, booked items
 * Update to  Booked / Lent / Returned statuse — DONE (v3.3: booked / approved / lent / returned / denied)
 * Add max lending time. — DONE (v3.4: `Item.max_booking_days`, default 8) 
 * Group by categories like a music shop (microphones, instrruments, utilities, )
