@@ -162,6 +162,9 @@ class Booking(db.Model):
     # status_changed_at is when it last moved along the lifecycle.
     created_at        = db.Column(db.DateTime, default=datetime.now, nullable=True)
     status_changed_at = db.Column(db.DateTime, default=datetime.now, nullable=True)
+    # Why an admin denied the request. Kept separate from `note`, which is the
+    # borrower's own reason for booking.
+    denial_reason     = db.Column(db.String(300), nullable=True)
     booking_items   = db.relationship('BookingItem', back_populates='booking', cascade='all, delete-orphan')
     item            = db.relationship('Item',   back_populates='bookings')
 
@@ -180,6 +183,7 @@ class Booking(db.Model):
             "note"          : self.note or '',
             "created_at"        : self.created_at.isoformat() if self.created_at else None,
             "status_changed_at" : self.status_changed_at.isoformat() if self.status_changed_at else None,
+            "denial_reason"     : self.denial_reason or '',
         }
 
     def set_status(self, new_status):
@@ -1232,6 +1236,9 @@ def return_item(booking_id):
         return redirect(url_for('admin_dashboard', section='bookings'))
 
     is_deny = actionType in ('deny', 'deny_no_note')
+    if is_deny:
+        # Keep the reason even for deny_no_note (no email, but the record stands).
+        booking.denial_reason = (note or '').strip() or None
     booking.set_status(STATUS_DENIED if is_deny else STATUS_RETURNED)
     db.session.commit()
 
@@ -1566,6 +1573,7 @@ def booking_detail_json(booking_id):
         "borrower_email": booking.borrower_email,
         "borrower_phone": booking.borrower_phone,
         "note":           booking.note or '',
+        "denial_reason":  booking.denial_reason or '',
         "status":         booking.status,
         "items":          items,
         "approve_url":    url_for('approve_booking', booking_id=booking.id),
@@ -1666,7 +1674,10 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
                                     return_date     = return_date,
                                     now             = datetime.now(),
                                     items           = items,
-                                    lend_url        = kargs.get('lend_url', ''),
+                                    # The template's primary button is Approve (v3.3).
+                                    # Passing lend_url here left {{ approve_url }} undefined,
+                                    # so the button rendered with an empty href.
+                                    approve_url     = kargs.get('approve_url', ''),
                                     deny_url        = kargs.get('deny_url', ''),
                                     note            = kargs.get('note', ''))
 

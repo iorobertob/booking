@@ -73,9 +73,8 @@
                     <th>Date</th>
                     <th>Borrower</th>
                     <th>Email</th>
-                    <th>Note</th>
-                    <th>Status</th>
                     <th>Items</th>
+                    <th>Status</th>
                     <th class="booking-actions">Actions</th>
                 </tr>
             </thead>
@@ -86,9 +85,14 @@
                     <td>{{ booking.borrow_date.strftime('%Y-%m-%d') if booking.borrow_date else '' }}</td>
                     <td>{{ booking.borrower_name }}</td>
                     <td>{{ booking.borrower_email }}</td>
-                    <td>{{ booking.note or '' }}</td>
+                    <td>
+                        {% if booking.booking_items %}
+                            {% for bi in booking.booking_items %}{{ bi.item_name }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+                        {% else %}
+                            {{ booking.item_name }}
+                        {% endif %}
+                    </td>
                     <td>{{ status_badge(booking.status) }}</td>
-                    <td>{{ booking.booking_items | length if booking.booking_items else 1 }}</td>
                     <td class="booking-actions" onclick="event.stopPropagation()">
                         <div class="actions-stack">
                         {% if booking.status == 'booked' %}
@@ -137,6 +141,10 @@
                             <div class="col-md-6">
                                 <strong>Status:</strong> <span id="modal-status" class="badge bg-secondary"></span><br>
                                 <strong>Note:</strong> <span id="modal-note"></span>
+                                <div id="modal-denial-wrap" class="mt-2 d-none">
+                                    <strong class="text-danger">Reason for denial:</strong>
+                                    <span id="modal-denial-reason"></span>
+                                </div>
                             </div>
                         </div>
                         <hr>
@@ -165,7 +173,7 @@
             $(document).ready(function() {
                 $('#bookingsAdminTable').DataTable({
                     order: [[0, 'desc']],
-                    columnDefs: [{ orderable: false, targets: 7 }],
+                    columnDefs: [{ orderable: false, targets: 6 }],
                     pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
                     language: { paginate: { previous: "&lt;", next: "&gt;" }, emptyTable: "No bookings yet." }
                 });
@@ -182,7 +190,10 @@
                         document.getElementById('modal-borrower-name').textContent  = data.borrower_name;
                         document.getElementById('modal-borrower-email').textContent = data.borrower_email;
                         document.getElementById('modal-borrower-phone').textContent = data.borrower_phone || '';
-                        document.getElementById('modal-note').textContent           = data.note || '';
+                        document.getElementById('modal-note').textContent           = data.note || '—';
+                        var denialWrap = document.getElementById('modal-denial-wrap');
+                        document.getElementById('modal-denial-reason').textContent = data.denial_reason || '(none given)';
+                        denialWrap.classList.toggle('d-none', data.status !== 'denied');
                         var statusEl = document.getElementById('modal-status');
                         statusEl.textContent = data.status;
                         statusEl.className = 'badge ' + statusBadgeClass(data.status);

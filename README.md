@@ -64,6 +64,7 @@ One record per booking session (single-item or group). For new group bookings, c
 | `return_date` | DateTime | First item's return date |
 | `created_at` | DateTime | When the request was submitted. NULL for bookings made before v3.4 |
 | `status_changed_at` | DateTime | When the booking last moved along the lifecycle. NULL for bookings made before v3.4 |
+| `denial_reason` | String(300) | **New in v3.6**: why an admin denied the request. Kept separate from `note`, which is the borrower's own reason for booking. Shown in the booking detail modal for denied bookings |
 | `status` | String(20) | Lifecycle: `'booked'` → `'approved'` → `'lent'` → `'returned'`, plus `'denied'`. Rows are **kept** at terminal statuses (`returned`/`denied`); only `ACTIVE_STATUSES` hold an item |
 | `note` | String(300) | Optional booking note |
 
@@ -436,6 +437,8 @@ mysql -u <db_user> -p <db_name> < vars/booking_dump_<timestamp>.sql
 | v2.1 | `booking.note`, `item.is_bookable` columns |
 | v3.4 (`b11084c2f89c`) | `item.max_booking_days` (server_default `8`), `booking.created_at`, `booking.status_changed_at` |
 | v3.5 (`e9a4b86a213f`) | `user.receives_admin_emails` (server_default `1`) |
+| v3.5.2 (`6d9e9e16b3b9`) | merge revision rejoining the server-generated `161eadb6a073` with the v3.4/v3.5 branch |
+| v3.6 (`62a223514ffe`) | `booking.denial_reason` |
 | v3.0 | `booking_item` table, `location` table |
 
 After deploying v3.0 for the first time, run:
@@ -515,6 +518,20 @@ sudo systemctl restart booking.service
 ---
 
 ## Changelog
+
+### v3.6 — 2026-10-08
+- **Fixed the Approve button in the admin notification email.** When the primary action was renamed from
+  "Mark as Lent" to "Approve" in v3.3, `send_email()` kept passing `lend_url` to the template while the
+  template read `{{ approve_url }}`. The variable was undefined, so the button rendered as
+  `<a href="">` and did nothing. It now passes `approve_url`.
+- **All Bookings table shows item names instead of the note.** The Note column is gone and the Items
+  column lists each item's name (it previously showed only a count, which the names make redundant).
+  The borrower's note is in the detail modal, opened by clicking the row.
+- **Denial reasons are stored.** `Booking.denial_reason` records what the admin typed when denying;
+  previously it was only used in the deny email and then discarded. It is returned by
+  `/booking_detail_json/<id>` and shown in the detail modal, highlighted, for denied bookings only.
+  `deny_no_note` still denies silently and records no reason.
+- **DB migration required**: `62a223514ffe`.
 
 ### v3.5.1 — 2026-10-03
 - **Password-manager autofill fix**: no template carried a single `autocomplete` attribute, so macOS

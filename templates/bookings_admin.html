@@ -85,6 +85,10 @@
                     <div class="col-md-6">
                         <strong>Status:</strong> <span id="modal-status" class="badge bg-secondary"></span><br>
                         <strong>Note:</strong> <span id="modal-note"></span>
+                        <div id="modal-denial-wrap" class="mt-2 d-none">
+                            <strong class="text-danger">Reason for denial:</strong>
+                            <span id="modal-denial-reason"></span>
+                        </div>
                     </div>
                 </div>
                 <hr>
@@ -145,7 +149,10 @@
                 document.getElementById('modal-borrower-name').textContent  = data.borrower_name;
                 document.getElementById('modal-borrower-email').textContent = data.borrower_email;
                 document.getElementById('modal-borrower-phone').textContent = data.borrower_phone || '';
-                document.getElementById('modal-note').textContent           = data.note || '';
+                document.getElementById('modal-note').textContent           = data.note || '—';
+                var denialWrap = document.getElementById('modal-denial-wrap');
+                document.getElementById('modal-denial-reason').textContent = data.denial_reason || '(none given)';
+                denialWrap.classList.toggle('d-none', data.status !== 'denied');
 
                 var statusEl = document.getElementById('modal-status');
                 statusEl.textContent = data.status;
