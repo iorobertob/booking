@@ -28,12 +28,31 @@ run() {
     fi
 }
 
+# ── Always operate on this script's own directory ──────────────────────────
+# Guards against running it from the wrong checkout, which silently migrates one
+# database while systemd serves a different directory.
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ── Sanity checks ──────────────────────────────────────────────────────────
-[[ -f "main.py" ]] || die "Run this script from the project root (main.py not found)."
+[[ -f "main.py" ]] || die "main.py not found next to this script — is this the project root?"
+
+# ── Activate the virtualenv ourselves ──────────────────────────────────────
+# Debian has no bare `python`, so without the venv the checks below fail with a
+# confusing "'python' not found". Activate it here instead of requiring callers
+# to remember. Respects an already-active venv.
+if [[ -z "${VIRTUAL_ENV:-}" ]]; then
+    if [[ -f "venv/bin/activate" ]]; then
+        info "Activating virtualenv at ./venv"
+        # shellcheck disable=SC1091
+        source venv/bin/activate
+    else
+        warn "No ./venv found — using whatever python/flask are on PATH."
+    fi
+fi
 
 command -v mysqldump >/dev/null 2>&1 || die "'mysqldump' not found. Install mysql-client and try again."
-command -v python    >/dev/null 2>&1 || die "'python' not found."
-command -v flask     >/dev/null 2>&1 || die "'flask' not found. Activate your virtualenv first."
+command -v python    >/dev/null 2>&1 || die "'python' not found, even after activating ./venv."
+command -v flask     >/dev/null 2>&1 || die "'flask' not found. Is ./venv set up (pip install -r requirements.txt)?"
 
 # ── Read credentials ───────────────────────────────────────────────────────
 # Priority: env vars > vars/vars.json

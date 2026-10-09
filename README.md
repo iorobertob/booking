@@ -458,6 +458,28 @@ python -c "from main import app, create_default_locations; create_default_locati
 
 ## Production Deployment
 
+### Deploying
+
+```bash
+cd /var/www/booking
+git pull
+./deploy.sh
+```
+
+`deploy.sh` activates the virtualenv itself, runs `migrate.sh` (backup → dependencies →
+migrations → seeding) and restarts the service, verifying it came back up. It always operates
+on its own directory, so it can be invoked from anywhere. Options:
+
+| Command | Effect |
+|---------|--------|
+| `./deploy.sh` | Migrate and restart. Warns if the checkout is behind origin or not on `main` |
+| `./deploy.sh --pull` | `git pull` first, then the above |
+| `./deploy.sh --no-restart` | Everything except restarting the service |
+| `DRY_RUN=1 ./deploy.sh` | Print every step, change nothing |
+| `SERVICE_NAME=other.service ./deploy.sh` | Restart a differently named unit |
+
+`migrate.sh` can still be run on its own; it also activates `./venv` by itself now.
+
 The app runs under gunicorn managed by systemd (`booking.service`).
 
 - **Config**: `vars/vars.json` on the server (gitignored)
@@ -518,6 +540,15 @@ sudo systemctl restart booking.service
 ---
 
 ## Changelog
+
+### v3.6.1 — 2026-10-09
+- **`deploy.sh`**: one command for the whole deploy — virtualenv, `migrate.sh`, service restart, and a
+  check that the service actually came back up. Supports `--pull`, `--no-restart`, `DRY_RUN=1` and
+  `SERVICE_NAME`. Warns when the checkout is behind origin, not on `main`, or has local modifications —
+  each of which has previously caused a deploy that appeared to succeed while serving old code.
+- **`migrate.sh` activates `./venv` itself** instead of failing with `'python' not found` (Debian has no
+  bare `python`). Both scripts now `cd` to their own directory, so running them from the wrong place
+  can no longer migrate one database while systemd serves another.
 
 ### v3.6 — 2026-10-08
 - **Fixed the Approve button in the admin notification email.** When the primary action was renamed from

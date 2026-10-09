@@ -48,11 +48,16 @@ export FLASK_APP=main.py
 flask db migrate -m "description"
 flask db upgrade
 
-# Backup DB + migrate in one step (preferred on server)
+# Deploy on the server (venv + backup + migrations + restart) — after `git pull`
+./deploy.sh
+DRY_RUN=1 ./deploy.sh    # preview only
+./deploy.sh --pull       # pull first, then deploy
+
+# Backup DB + migrate only (deploy.sh calls this)
 ./migrate.sh
 DRY_RUN=1 ./migrate.sh   # preview only
 
-# Restart production service
+# Restart production service by hand
 sudo systemctl restart booking.service
 ```
 
