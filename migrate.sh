@@ -189,7 +189,16 @@ fi
 
 # ── Done ───────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}${BOLD}All done.${RESET}"
+echo -e "${GREEN}${BOLD}Migrations done.${RESET}"
+echo ""
+# The most common deploy mistake: migrating but never restarting, so gunicorn
+# keeps serving the old code and the deploy looks like it did nothing.
+if [[ "${CALLED_FROM_DEPLOY:-0}" != "1" ]]; then
+    warn "migrate.sh does NOT restart the service — the new code is NOT live yet."
+    warn "Run ${BOLD}./deploy.sh${RESET} to migrate AND restart in one step, or restart now with:"
+    warn "    sudo systemctl restart booking.service"
+    echo ""
+fi
 echo -e "  Backup : ${BACKUP_FILE}"
 echo -e "  To roll back the schema: ${YELLOW}flask db downgrade${RESET}"
 echo -e "  To restore data:         ${YELLOW}mysql -u $DB_USER -p $DB_NAME_VAL < $BACKUP_FILE${RESET}"

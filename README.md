@@ -541,6 +541,17 @@ sudo systemctl restart booking.service
 
 ## Changelog
 
+### v3.6.3 — 2026-10-09
+- **`deploy.sh` proves the service actually restarted.** It records the unit's `ActiveEnterTimestamp`
+  before and after, and warns if the start time did not change — `is-active` alone passes even when the
+  restart silently did nothing. A failed restart, or a service that is down afterwards, now exits
+  non-zero with the command to investigate rather than printing "Deploy complete".
+- **`migrate.sh` says plainly that it does not restart.** Running it instead of `./deploy.sh` leaves the
+  new code on disk while gunicorn serves the old one, which looks exactly like a deploy that did
+  nothing — the cause of the "sorting fix didn't work" report. It now ends with that warning and points
+  at `./deploy.sh`. The warning is suppressed when `deploy.sh` invokes it, since that restarts for you.
+- `--no-restart` spells out that the code is not live and gives the command to make it so.
+
 ### v3.6.2 — 2026-10-09
 - **Admin tables keep their sorting across row actions.** Toggling admin rights or email subscription,
   deleting a user or item, or approving/denying a booking POSTs and redirects back to the same page,

@@ -75,27 +75,48 @@ fi
 echo ""
 info "Running migrate.sh (backup, dependencies, migrations, seeding)..."
 [[ -x "./migrate.sh" ]] || die "./migrate.sh is missing or not executable."
-DRY_RUN="$DRY_RUN" ./migrate.sh
+# CALLED_FROM_DEPLOY silences migrate.sh's "you still need to restart" notice,
+# since this script restarts for you a few lines down.
+CALLED_FROM_DEPLOY=1 DRY_RUN="$DRY_RUN" ./migrate.sh
 
 # ── 3. Restart the service ─────────────────────────────────────────────────
+# Without this the new code is on disk but gunicorn keeps serving the old one,
+# which looks exactly like "the deploy did nothing".
 if [[ "$DO_RESTART" == "1" ]]; then
     echo ""
     info "Restarting ${BOLD}${SERVICE}${RESET}..."
-    if command -v systemctl >/dev/null 2>&1; then
-        run sudo systemctl restart "$SERVICE"
-        if [[ "$DRY_RUN" != "1" ]]; then
-            sleep 2
-            if systemctl is-active --quiet "$SERVICE"; then
-                success "${SERVICE} is active."
-            else
-                die "${SERVICE} did not come back up. Check: journalctl -u ${SERVICE} -n 50"
-            fi
-        fi
+
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "systemctl not found — restart the app yourself, or the new code will NOT be live."
+    elif [[ "$DRY_RUN" == "1" ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} sudo systemctl restart ${SERVICE}"
     else
-        warn "systemctl not available — restart the app yourself."
+        # Remember when the unit last came up, so we can prove it actually
+        # restarted. `is-active` alone would pass even if nothing happened.
+        STARTED_BEFORE="$(systemctl show -p ActiveEnterTimestamp --value "$SERVICE" 2>/dev/null || true)"
+
+        if ! sudo systemctl restart "$SERVICE"; then
+            die "Restart failed. Run it yourself: sudo systemctl restart ${SERVICE}"
+        fi
+
+        sleep 2
+
+        if ! systemctl is-active --quiet "$SERVICE"; then
+            die "${SERVICE} is NOT running after the restart. Check: journalctl -u ${SERVICE} -n 50"
+        fi
+
+        STARTED_AFTER="$(systemctl show -p ActiveEnterTimestamp --value "$SERVICE" 2>/dev/null || true)"
+        if [[ -n "$STARTED_BEFORE" && "$STARTED_BEFORE" == "$STARTED_AFTER" ]]; then
+            warn "${SERVICE} is active, but its start time did not change —"
+            warn "it may not actually have restarted. Check: systemctl status ${SERVICE}"
+        else
+            success "${SERVICE} restarted — the new code is live."
+            [[ -n "$STARTED_AFTER" ]] && info "Running since ${STARTED_AFTER}"
+        fi
     fi
 else
-    warn "Skipping restart (--no-restart). The new code is NOT live yet."
+    warn "Skipping restart (--no-restart)."
+    warn "The new code is on disk but NOT live until you run: sudo systemctl restart ${SERVICE}"
 fi
 
 echo ""
