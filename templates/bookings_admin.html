@@ -125,6 +125,8 @@
 
     $(document).ready(function() {
         $('#bookingsAdminTable').DataTable({
+            // Approve/Lend/Deny redirect back here; keep the table as it was.
+            stateSave: true,
             order: [[0, 'desc']],
             columnDefs: [{ orderable: false, targets: 7 }],
             pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',

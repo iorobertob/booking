@@ -541,6 +541,17 @@ sudo systemctl restart booking.service
 
 ## Changelog
 
+### v3.6.2 — 2026-10-09
+- **Admin tables keep their sorting across row actions.** Toggling admin rights or email subscription,
+  deleting a user or item, or approving/denying a booking POSTs and redirects back to the same page,
+  which reset the DataTable to its default order every time. `stateSave: true` is now set on
+  `#usersTable`, `#bookingsAdminTable` (both in the dashboard and `/bookings_admin`), `#itemsTable` and
+  `#historyTable`, so the sort column and direction, the search term, the page length and the current
+  page all survive the redirect. State lives in the browser's `localStorage`, keyed per table and path,
+  and expires after DataTables' default two hours.
+- Deliberately not AJAX: the POST/redirect flow is unchanged, so flash messages, the back button and
+  non-JS behaviour all stay as they were.
+
 ### v3.6.1 — 2026-10-09
 - **`deploy.sh`**: one command for the whole deploy — virtualenv, `migrate.sh`, service restart, and a
   check that the service actually came back up. Supports `--pull`, `--no-restart`, `DRY_RUN=1` and

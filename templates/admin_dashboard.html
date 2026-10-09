@@ -172,6 +172,10 @@
 
             $(document).ready(function() {
                 $('#bookingsAdminTable').DataTable({
+                    // Admin actions POST and redirect back here, which would otherwise
+                    // reset the table. stateSave restores the sort, search, page length and
+                    // current page after that reload (DataTables' default 2h expiry).
+                    stateSave: true,
                     order: [[0, 'desc']],
                     columnDefs: [{ orderable: false, targets: 6 }],
                     pagingType: $(window).width() < 768 ? 'simple' : 'simple_numbers',
@@ -319,7 +323,7 @@
 
         <script>
         $(document).ready(function() {
-            $('#usersTable').DataTable({ order: [[0,'asc']], responsive: true });
+            $('#usersTable').DataTable({ order: [[0,'asc']], responsive: true, stateSave: true });
         });
         </script>
 
@@ -543,7 +547,7 @@
 
         <script>
         $(document).ready(function() {
-            $('#itemsTable').DataTable({ order: [[1,'asc']], responsive: true });
+            $('#itemsTable').DataTable({ order: [[1,'asc']], responsive: true, stateSave: true });
         });
         </script>
 
@@ -616,7 +620,7 @@
 
         <script>
         $(document).ready(function() {
-            $('#historyTable').DataTable({ order: [[0,'desc']], responsive: true, pageLength: 25 });
+            $('#historyTable').DataTable({ order: [[0,'desc']], responsive: true, pageLength: 25, stateSave: true });
         });
         </script>
 
