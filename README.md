@@ -541,6 +541,29 @@ sudo systemctl restart booking.service
 
 ## Changelog
 
+### v4.0 phase 1 — 2026-10-19 — Faculties
+First of four phases making one installation serve three faculties: **MISC**, **KIMO**
+(Nacionalinė kino mokykla) and **Theatre & Dance**.
+
+- **`Faculty` model** (`code`, `short_name`, `name`, `name_lt`, `sort_order`, `is_active`), seeded by
+  `create_default_faculties()` from `DEFAULT_FACULTIES` in `main.py`.
+- **`Item`, `Location` and `Booking` gain `faculty_id`.** `backfill_faculty_assignments()` assigns every
+  pre-existing row to MISC — 152 rows locally (90 items, 6 locations, 56 bookings). Both run from
+  `__main__` and from `migrate.sh`, matching how this project does data fixes (schema in Alembic,
+  data in seeders).
+- **Location names are unique per faculty**, not globally, so two faculties may each have a "Studio A".
+- **Homepage tabs** switch faculty. `?faculty=<code>` makes links shareable; the choice is then
+  remembered in the session, and opening an item switches to that item's faculty. An unknown code falls
+  back rather than 404ing.
+- **A booking cannot mix faculties** — approval, denial and notifications must resolve to one set of
+  admins. Checked before per-item validation so the message is clear.
+- Users are deliberately **not** scoped to a faculty: anyone may book from any faculty, which is what
+  makes the shared borrowing history (phase 3) worth consulting.
+- **DB migration required**: `0d9bbfc1f476`.
+
+> Note: this revision's `downgrade()` drops unnamed foreign keys, which MySQL rejects. To roll back, restore
+> the dump `migrate.sh` takes before migrating rather than using `flask db downgrade`.
+
 ### v3.6.3 — 2026-10-09
 - **`deploy.sh` proves the service actually restarted.** It records the unit's `ActiveEnterTimestamp`
   before and after, and warns if the start time did not change — `is-active` alone passes even when the

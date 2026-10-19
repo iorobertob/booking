@@ -119,6 +119,132 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 
+# ── Faculties ─────────────────────────────────────────────────────────────────
+# The system serves three faculties from one installation. Items, locations,
+# bookings and admin rights belong to a faculty; USERS DO NOT — a user may book
+# from any faculty, which is what makes the shared borrowing history on their
+# profile worth consulting.
+DEFAULT_FACULTY_CODE = 'misc'
+
+# Seeded on first run. Edit here (and re-run the seeder) to rename or add one.
+DEFAULT_FACULTIES = [
+    {"code": "misc",    "short_name": "MISC",
+     "name": "Music Studies Innovation Centre",
+     "name_lt": "Muzikos inovacijų studijų centras", "sort_order": 1},
+    {"code": "kimo",    "short_name": "KIMO",
+     "name": "National Cinema School",
+     "name_lt": "Nacionalinė kino mokykla", "sort_order": 2},
+    {"code": "theatre", "short_name": "Theatre & Dance",
+     "name": "Theatre and Dance",
+     "name_lt": "Teatras ir šokis", "sort_order": 3},
+]
+
+
+class Faculty(db.Model):
+    id         = db.Column(db.Integer, primary_key=True)
+    code       = db.Column(db.String(30),  unique=True, nullable=False)  # URL slug: misc, kimo, theatre
+    short_name = db.Column(db.String(40),  nullable=False)               # tab label
+    name       = db.Column(db.String(150), nullable=False)               # English
+    name_lt    = db.Column(db.String(150), nullable=True)                # Lithuanian
+    sort_order = db.Column(db.Integer, default=0,    nullable=False)
+    is_active  = db.Column(db.Boolean, default=True, nullable=False)
+
+    def __repr__(self):
+        return f"<Faculty {self.code}>"
+
+
+def all_faculties():
+    """Active faculties in tab order."""
+    return Faculty.query.filter_by(is_active=True).order_by(Faculty.sort_order, Faculty.id).all()
+
+
+def default_faculty():
+    return Faculty.query.filter_by(code=DEFAULT_FACULTY_CODE).first() or Faculty.query.order_by(Faculty.sort_order).first()
+
+
+def current_faculty():
+    """The faculty currently being viewed.
+
+    `?faculty=<code>` wins so links and tabs are shareable; otherwise the last
+    one chosen in this session; otherwise the default. Always returns a row, so
+    callers never have to handle None.
+    """
+    code = request.args.get('faculty')
+    if code:
+        fac = Faculty.query.filter_by(code=code).first()
+        if fac:
+            session['faculty_code'] = fac.code
+            return fac
+        # Unknown code in the URL: fall through rather than 404, so a stale
+        # bookmark still lands somewhere usable.
+    code = session.get('faculty_code')
+    if code:
+        fac = Faculty.query.filter_by(code=code).first()
+        if fac:
+            return fac
+    return default_faculty()
+
+
+def backfill_faculty_assignments():
+    """Give every pre-faculty row a faculty.
+
+    Everything that existed before the system became multi-faculty belonged to
+    MISC, so NULL faculty_id is backfilled to the default faculty. Kept here
+    rather than in the migration because this project does schema in Alembic and
+    data fixes in seeders that migrate.sh runs (as with the is_bookable fix).
+    Idempotent: only NULL rows are touched.
+    """
+    with app.app_context():
+        fac = default_faculty()
+        if not fac:
+            logger.warning("No faculties seeded — skipping faculty backfill.")
+            return
+        total = 0
+        for model in (Item, Location, Booking):
+            n = model.query.filter(model.faculty_id.is_(None)).update(
+                {model.faculty_id: fac.id}, synchronize_session=False)
+            if n:
+                logger.info("Backfilled %s %s row(s) to faculty '%s'", n, model.__name__, fac.code)
+            total += n
+        db.session.commit()
+        print(f"  Assigned {total} pre-existing row(s) to '{fac.code}'.")
+
+
+def faculty_filter(column, faculty):
+    """Restrict `column` to `faculty`.
+
+    The migration backfills every row, so a NULL faculty_id should not exist.
+    The default faculty still claims NULLs as a safety net, so a row that slips
+    through (e.g. created by an older release mid-deploy) stays visible instead
+    of disappearing from every tab.
+    """
+    if faculty is None:
+        return db.true()
+    if faculty.code == DEFAULT_FACULTY_CODE:
+        return db.or_(column == faculty.id, column.is_(None))
+    return column == faculty.id
+
+
+def items_for_faculty(faculty):
+    return Item.query.filter(faculty_filter(Item.faculty_id, faculty)).all()
+
+
+def locations_for_faculty(faculty):
+    return Location.query.filter(
+        faculty_filter(Location.faculty_id, faculty)
+    ).order_by(Location.name).all()
+
+
+def create_default_faculties():
+    """Seed the three faculties. Existing rows are left untouched."""
+    with app.app_context():
+        for spec in DEFAULT_FACULTIES:
+            if not Faculty.query.filter_by(code=spec["code"]).first():
+                db.session.add(Faculty(**spec))
+                logger.info("Seeded faculty: %s", spec["code"])
+        db.session.commit()
+
+
 # ── Booking statuses ──────────────────────────────────────────────────────────
 # Lifecycle:  booked → approved → lent → returned
 #                   ↘ denied
@@ -165,6 +291,11 @@ class Booking(db.Model):
     # Why an admin denied the request. Kept separate from `note`, which is the
     # borrower's own reason for booking.
     denial_reason     = db.Column(db.String(300), nullable=True)
+    # Which faculty's equipment this booking is for. A booking never spans two
+    # faculties — otherwise "notify the faculty the activity came from" has no
+    # single answer. Enforced when the booking is created.
+    faculty_id        = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True, index=True)
+    faculty           = db.relationship('Faculty')
     booking_items   = db.relationship('BookingItem', back_populates='booking', cascade='all, delete-orphan')
     item            = db.relationship('Item',   back_populates='bookings')
 
@@ -203,6 +334,9 @@ class Item(db.Model):
     # Mon and a return date of the following Mon is 8 days. Set per item by admins.
     max_booking_days = db.Column(db.Integer, default=DEFAULT_MAX_BOOKING_DAYS,
                                  server_default=str(DEFAULT_MAX_BOOKING_DAYS), nullable=False)
+    # The faculty that owns this piece of equipment.
+    faculty_id       = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True, index=True)
+    faculty          = db.relationship('Faculty')
     bookings        = db.relationship('Booking', order_by=Booking.id, back_populates='item')
 
 class BookingItem(db.Model):
@@ -229,7 +363,15 @@ class BookingItem(db.Model):
 
 class Location(db.Model):
     id   = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
+    # Rooms are physical and belong to one faculty. The name is unique within a
+    # faculty rather than globally, so two faculties may each have a "Studio A".
+    name = db.Column(db.String(100), nullable=False)
+    faculty_id = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True, index=True)
+    faculty    = db.relationship('Faculty')
+
+    __table_args__ = (
+        db.UniqueConstraint('faculty_id', 'name', name='uq_location_faculty_name'),
+    )
 
 
 # Define the User model
@@ -288,11 +430,15 @@ def create_admin_user():
 
 
 def create_default_locations():
-    """Pre-populate Location table with default locations A, B, C."""
+    """Pre-populate the default faculty with locations A, B, C."""
     with app.app_context():
+        fac = default_faculty()
+        if not fac:
+            logger.warning("No faculties seeded yet — skipping default locations.")
+            return
         for name in ['A', 'B', 'C']:
-            if not Location.query.filter_by(name=name).first():
-                db.session.add(Location(name=name))
+            if not Location.query.filter_by(name=name, faculty_id=fac.id).first():
+                db.session.add(Location(name=name, faculty_id=fac.id))
         db.session.commit()
 
 
@@ -431,8 +577,9 @@ def policy():
 @app.route('/')
 def home():
 
-    items = Item.query.all()
-    availability = check_all_items_availability()
+    faculty = current_faculty()
+    items = items_for_faculty(faculty)
+    availability = check_all_items_availability(items)
 
     bookings = []
     for item in items:
@@ -457,7 +604,9 @@ def home():
         flash("Select at least one item before booking.", "warning")
         return redirect(url_for('home'))
 
-    return render_template('home.html', items=items, availability=availability, bookings = bookings, borrower_info=borrower_info)
+    return render_template('home.html', items=items, availability=availability,
+                           bookings=bookings, borrower_info=borrower_info,
+                           faculties=all_faculties(), faculty=faculty)
 
 """
 Set of auxiliary functions for MS Office Login
@@ -635,6 +784,10 @@ def set_borrower():
 @app.route('/item/<int:item_id>', methods=['GET', 'POST'])
 def item_details(item_id):
     item = Item.query.get_or_404(item_id)
+    if item.faculty_id:
+        fac = Faculty.query.get(item.faculty_id)
+        if fac:
+            session['faculty_code'] = fac.code
 
     # Only active bookings: this table answers "when is this item taken?", so a
     # returned or denied booking would wrongly make a free period look occupied.
@@ -692,8 +845,14 @@ def row2dict(row):
     return d
 
 
-def check_all_items_availability():
-    items = Item.query.all()
+def check_all_items_availability(items=None):
+    """Availability strings, positionally aligned with `items`.
+
+    Callers pass the exact list they are rendering (e.g. one faculty's items);
+    the two lists must stay in step, so never re-query here.
+    """
+    if items is None:
+        items = Item.query.all()
     now   = datetime.now()
     availability = []
     for item in items:
@@ -833,6 +992,21 @@ def book():
 
     note = items_list[0].get('note', '') if items_list else ''
 
+    # A booking belongs to exactly one faculty: approval, denial and the
+    # notification emails all have to resolve to a single set of admins.
+    # Checked before per-item validation so this structural problem is reported
+    # plainly, instead of surfacing as whichever item happens to fail first.
+    faculty_ids = {Item.query.get_or_404(i["id"]).faculty_id for i in items_list}
+    if len(faculty_ids) > 1:
+        names = sorted(
+            (Faculty.query.get(fid).short_name if fid else DEFAULT_FACULTY_CODE.upper())
+            for fid in faculty_ids
+        )
+        flash(f'A booking cannot mix equipment from different faculties '
+              f'({", ".join(names)}). Please book them separately.', 'danger')
+        return redirect(url_for('cart'))
+    booking_faculty_id = next(iter(faculty_ids)) if faculty_ids else None
+
     # Validate all items before writing anything
     for single_item in items_list:
         item = Item.query.get_or_404(single_item["id"])
@@ -861,6 +1035,7 @@ def book():
     new_booking = Booking(
         item_id        = first_item.id,
         item_name      = first_item.name,
+        faculty_id     = booking_faculty_id,
         borrower_name  = borrower_name,
         borrower_email = borrower_email,
         borrower_phone = borrower_phone,
@@ -1303,16 +1478,19 @@ def add_item():
         name        = request.form.get('name')
         location    = request.form.get('location')
         is_bookable = 'is_bookable' in request.form
+        faculty = current_faculty()
         new_item = Item(name=name, location=location, is_bookable=is_bookable,
-                        max_booking_days=_max_booking_days_from_form(request.form))
+                        max_booking_days=_max_booking_days_from_form(request.form),
+                        faculty_id=faculty.id if faculty else None)
         db.session.add(new_item)
         db.session.commit()
         flash(f'Item {name} added successfully!', 'success')
         next_url = request.form.get('next') or url_for('home')
         return redirect(next_url)
 
-    locations = Location.query.order_by(Location.name).all()
-    return render_template('add_item.html', locations=locations)
+    faculty = current_faculty()
+    return render_template('add_item.html', locations=locations_for_faculty(faculty),
+                           faculty=faculty)
 
 
 @app.route('/edit_item/<int:item_id>', methods=['GET', 'POST'])
@@ -1320,8 +1498,9 @@ def add_item():
 def edit_item(item_id):
     if request.method == 'GET':
         item = Item.query.get_or_404(item_id)
-        locations = Location.query.order_by(Location.name).all()
-        return render_template('edit_item.html', item=item, locations=locations)
+        return render_template('edit_item.html', item=item,
+                               locations=locations_for_faculty(item.faculty),
+                               faculty=item.faculty)
 
     if request.method == 'POST':
         name        = request.form.get('name')
@@ -1489,8 +1668,10 @@ def export_items():
 @app.route('/locations')
 @admin_required
 def locations():
-    all_locations = Location.query.order_by(Location.name).all()
-    return render_template('locations.html', locations=all_locations)
+    faculty = current_faculty()
+    return render_template('locations.html',
+                           locations=locations_for_faculty(faculty),
+                           faculty=faculty)
 
 
 @app.route('/add_location', methods=['POST'])
@@ -1499,12 +1680,15 @@ def add_location():
     name = request.form.get('name', '').strip()
     next_url = request.form.get('next') or url_for('locations')
     if name:
-        if not Location.query.filter_by(name=name).first():
-            db.session.add(Location(name=name))
+        faculty = current_faculty()
+        fid = faculty.id if faculty else None
+        # Names are unique per faculty, so the same room name may exist elsewhere.
+        if not Location.query.filter_by(name=name, faculty_id=fid).first():
+            db.session.add(Location(name=name, faculty_id=fid))
             db.session.commit()
             flash(f'Location "{name}" added.', 'success')
         else:
-            flash(f'Location "{name}" already exists.', 'warning')
+            flash(f'Location "{name}" already exists in this faculty.', 'warning')
     return redirect(next_url)
 
 
@@ -1784,18 +1968,21 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
 @admin_required
 def admin_dashboard():
     section = request.args.get('section', 'bookings')
-    data = {'section': section}
+    faculty = current_faculty()
+    data = {'section': section, 'faculty': faculty, 'faculties': all_faculties()}
     if section == 'bookings':
         data['bookings'] = Booking.query.order_by(Booking.id.desc()).all()
     elif section == 'users':
         data['users'] = User.query.order_by(User.username).all()
     elif section == 'locations':
-        data['locations'] = Location.query.order_by(Location.name).all()
+        data['locations'] = locations_for_faculty(data['faculty'])
     elif section == 'programmes':
         data['programmes'] = Programme.query.order_by(Programme.name).all()
     elif section == 'items':
-        data['items'] = Item.query.order_by(Item.name).all()
-        data['locations'] = Location.query.order_by(Location.name).all()
+        fac = data['faculty']
+        data['items'] = Item.query.filter(
+            faculty_filter(Item.faculty_id, fac)).order_by(Item.name).all()
+        data['locations'] = locations_for_faculty(fac)
     elif section == 'history':
         # Full booking log: every booking ever made, including terminal ones.
         # Optional ?status= filter; 'all' (or absent) shows everything.
@@ -1994,6 +2181,8 @@ if __name__ == '__main__':
     if args.dev:
         LOCALHOST = True
 
+    create_default_faculties()
+    backfill_faculty_assignments()
     create_admin_user()
     create_default_locations()
     create_default_programmes()

@@ -6,14 +6,31 @@
     <img class="image-brand" src="{{ url_for('static', filename='images/misc_logo_alpha.png') }}" alt="Icon" style="height: 100px;"/>
     
 </a>
-<a class="navbar-brand" href="{{ url_for('home') }}">
-    <h1>MISC's Equipment</h1>
+<a class="navbar-brand" href="{{ url_for('home', faculty=faculty.code if faculty else None) }}">
+    <h1>{{ (faculty.short_name ~ ' Equipment') if faculty else 'Equipment' }}</h1>
 </a>
 
+{# ── Faculty tabs ───────────────────────────────────────────────────────────
+   One installation serves three faculties; these switch which set of equipment
+   is shown. The choice is remembered in the session, so the rest of the site
+   stays in the same faculty while browsing. #}
+{% if faculties and faculties | length > 1 %}
+<ul class="nav nav-tabs mb-3" id="facultyTabs">
+    {% for f in faculties %}
+    <li class="nav-item">
+        <a class="nav-link {% if faculty and f.id == faculty.id %}active{% endif %}"
+           href="{{ url_for('home', faculty=f.code) }}"
+           title="{{ f.name }}{% if f.name_lt %} — {{ f.name_lt }}{% endif %}">
+            {{ f.short_name }}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
 
 <div class="mb-3 d-flex flex-column flex-md-row justify-content-center justify-content-md-end align-items-center gap-2 px-3">
     {% if current_user.is_authenticated and current_user.is_admin %}
-    <a href="{{ url_for('add_item') }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Add Item</a>
+    <a href="{{ url_for('add_item', faculty=faculty.code if faculty else None) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Add Item</a>
     <a href="{{ url_for('edit_item', item_id='1') }}" onclick="deleteSelectedItems('delete')" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Delete Selected</a>
     {% endif %}
     <a href="javascript:void(0);" onclick="bookSelectedItems('book', null)" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Book Selected</a>

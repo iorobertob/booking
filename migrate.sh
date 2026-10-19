@@ -167,6 +167,26 @@ if [[ "$DRY_RUN" != "1" ]]; then
     success "NULL is_bookable values fixed."
 fi
 
+# ── Seed faculties ─────────────────────────────────────────────────────────
+echo ""
+info "Seeding faculties (MISC, KIMO, Theatre & Dance) if not already present..."
+
+run python -c '"from main import create_default_faculties; create_default_faculties()"'
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Faculties seeded."
+fi
+
+# ── Assign pre-faculty rows to the default faculty ─────────────────────────
+echo ""
+info "Assigning items, locations and bookings without a faculty to the default..."
+
+run python -c '"from main import backfill_faculty_assignments; backfill_faculty_assignments()"'
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Faculty backfill complete."
+fi
+
 # ── Seed default locations ─────────────────────────────────────────────────
 echo ""
 info "Seeding default locations (A, B, C) if not already present..."
