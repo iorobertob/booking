@@ -1,6 +1,8 @@
 import unittest
 from main import app, db
 from flask.testing import FlaskClient
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
 
 class FlaskAppTests(unittest.TestCase):
@@ -8,10 +10,23 @@ class FlaskAppTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         app.config['TESTING'] = True
+
+        # Flask-SQLAlchemy 3.x builds its engines during init_app, so setting
+        # SQLALCHEMY_DATABASE_URI here is ignored — these tests were running
+        # db.create_all() against the real MySQL database, creating tables
+        # behind Alembic's back. Replace the engine itself so the suite is
+        # genuinely isolated.
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        db._app_engines[app] = {
+            None: create_engine('sqlite://', connect_args={'check_same_thread': False},
+                                poolclass=StaticPool)
+        }
+
         cls.app = app
         cls.client: FlaskClient = cls.app.test_client()
         with cls.app.app_context():
+            assert db.engine.url.get_backend_name() == 'sqlite', \
+                f'refusing to run tests against {db.engine.url}'
             db.create_all()
 
     def setUp(self):

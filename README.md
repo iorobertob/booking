@@ -541,6 +541,30 @@ sudo systemctl restart booking.service
 
 ## Changelog
 
+### v4.0 phase 2 — 2026-10-19 — Roles and scoped administration
+- **`FacultyAdmin`** (user × faculty) is the source of truth for who administers what; `User.is_admin`
+  becomes a denormalisation meaning "administers at least one faculty, or is a super admin", written
+  only by `refresh_admin_flag()`.
+- **`User.is_super_admin`** — administers every faculty and is the only role that may grant or revoke
+  rights (`/admin/toggle_faculty_admin/<user>/<faculty>`, `/admin/toggle_super_admin/<user>`). Seeded
+  from `SUPER_ADMINS`, defaulting to roberto.becerra@lmta.lt and edvinas.siliunas@lmta.lt. The last
+  super admin cannot be demoted, and nobody can demote themselves.
+- **`migrate_admin_roles_to_faculties()`** converts the old flag into grants — every existing admin
+  became a MISC admin (7 grants, 2 super admins locally).
+- **Notification emails are scoped**: `admin_notification_contacts(faculty)` returns that faculty's
+  admins plus super admins. Subscription lives per grant, so an admin of two faculties can be notified
+  about one and muted on the other.
+- **Dashboard is per faculty**, with pills for the faculties you administer. Bookings, items, locations
+  and history are filtered. An explicit `?faculty=` you don't administer returns 403; only a stale
+  session falls back silently.
+- **Cross-faculty actions are refused** — approve, lend, return, deny, booking JSON, item edit/delete and
+  location edit/delete all check `require_faculty_admin`.
+- **Fixed: `unit_tests.py` was running against the real MySQL database.** It set
+  `SQLALCHEMY_DATABASE_URI` after `init_app`, which Flask-SQLAlchemy 3.x ignores, so `db.create_all()`
+  ran against dev MySQL and created `faculty_admin` outside Alembic. The suite now swaps the engine and
+  asserts it is on sqlite before creating anything.
+- **DB migration required**: `491d4dacd8d2`.
+
 ### v4.0 phase 1 — 2026-10-19 — Faculties
 First of four phases making one installation serve three faculties: **MISC**, **KIMO**
 (Nacionalinė kino mokykla) and **Theatre & Dance**.

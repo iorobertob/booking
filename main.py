@@ -90,6 +90,16 @@ if isinstance(_admin_emails_raw, str):
 else:
     ADMIN_EMAILS = set(e.lower() for e in (_admin_emails_raw or []))
 
+_super_admins_raw = _cfg('SUPER_ADMINS', 'super_admins')
+# Seeded as super admins on first run; they administer every faculty and are the
+# only ones who may grant or revoke faculty admin rights.
+if isinstance(_super_admins_raw, str):
+    SUPER_ADMIN_EMAILS = set(e.strip().lower() for e in _super_admins_raw.split(',') if e.strip())
+elif _super_admins_raw:
+    SUPER_ADMIN_EMAILS = set(e.lower() for e in _super_admins_raw)
+else:
+    SUPER_ADMIN_EMAILS = {'roberto.becerra@lmta.lt', 'edvinas.siliunas@lmta.lt'}
+
 AUTHORITY     = f"https://login.microsoftonline.com/{TENANT_ID}"
 REDIRECT_PATH = "/getAToken"
 SCOPE         = ["User.Read"]
@@ -208,6 +218,44 @@ def backfill_faculty_assignments():
             total += n
         db.session.commit()
         print(f"  Assigned {total} pre-existing row(s) to '{fac.code}'.")
+
+
+def migrate_admin_roles_to_faculties():
+    """Turn the old single is_admin flag into per-faculty grants.
+
+    Every existing admin administered what is now MISC, so each gets a
+    FacultyAdmin row for the default faculty, carrying over their email
+    subscription. Addresses in SUPER_ADMIN_EMAILS additionally become super
+    admins. Idempotent: existing grants are left alone.
+    """
+    with app.app_context():
+        fac = default_faculty()
+        if not fac:
+            logger.warning("No faculties seeded — skipping admin role migration.")
+            return
+
+        granted = promoted = 0
+        for user in User.query.all():
+            email = (user.notification_email or user.username or '').lower()
+
+            if email in SUPER_ADMIN_EMAILS and not user.is_super_admin:
+                user.is_super_admin = True
+                promoted += 1
+                logger.info("Promoted to super admin: %s", email)
+
+            # Pre-faculty admins administered MISC.
+            if user.is_admin and not user.admin_role_for(fac):
+                db.session.add(FacultyAdmin(
+                    user_id=user.id, faculty_id=fac.id,
+                    receives_admin_emails=bool(user.receives_admin_emails)))
+                granted += 1
+                logger.info("Granted %s admin of '%s'", email or user.username, fac.code)
+
+        db.session.flush()
+        for user in User.query.all():
+            refresh_admin_flag(user)
+        db.session.commit()
+        print(f"  {granted} faculty admin grant(s), {promoted} super admin(s).")
 
 
 def faculty_filter(column, faculty):
@@ -389,6 +437,38 @@ class User(UserMixin, db.Model):
     # the dashboard Users section; ignored for non-admins.
     receives_admin_emails = db.Column(db.Boolean, default=True, nullable=False,
                                       server_default='1')
+    # Super admins administer every faculty and are the only ones who may grant
+    # or revoke faculty admin rights.
+    is_super_admin = db.Column(db.Boolean, default=False, nullable=False,
+                               server_default='0')
+
+    # FacultyAdmin is the source of truth for WHICH faculties a user administers.
+    # `is_admin` is a denormalisation meaning "administers at least one faculty,
+    # or is a super admin"; it keeps @admin_required and the templates simple.
+    # It is only ever written by refresh_admin_flag(), so the two cannot drift.
+
+    @property
+    def admin_faculties(self):
+        """Faculties this user administers — all of them for a super admin."""
+        if self.is_super_admin:
+            return all_faculties()
+        return [r.faculty for r in self.faculty_admin_roles if r.faculty]
+
+    @property
+    def admin_faculty_ids(self):
+        return {f.id for f in self.admin_faculties}
+
+    def is_admin_of(self, faculty):
+        if self.is_super_admin:
+            return True
+        if faculty is None:
+            return False
+        return any(r.faculty_id == faculty.id for r in self.faculty_admin_roles)
+
+    def admin_role_for(self, faculty):
+        if faculty is None:
+            return None
+        return next((r for r in self.faculty_admin_roles if r.faculty_id == faculty.id), None)
 
     @property
     def notification_email(self):
@@ -407,6 +487,40 @@ class User(UserMixin, db.Model):
     def display_name(self):
         name = f"{self.first_name or ''} {self.last_name or ''}".strip()
         return name or (self.username or '')
+
+
+class FacultyAdmin(db.Model):
+    """Grants one user admin rights over one faculty.
+
+    Email subscription lives here rather than on User, so an admin of two
+    faculties can be notified about one and not the other.
+    """
+    __tablename__ = 'faculty_admin'
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    faculty_id = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=False, index=True)
+    receives_admin_emails = db.Column(db.Boolean, default=True, nullable=False, server_default='1')
+
+    user    = db.relationship('User', backref=db.backref('faculty_admin_roles',
+                                                         cascade='all, delete-orphan'))
+    faculty = db.relationship('Faculty')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'faculty_id', name='uq_faculty_admin_user_faculty'),
+    )
+
+
+def refresh_admin_flag(user):
+    """Keep User.is_admin in step with the grants. The single write path.
+
+    Queries rather than reading user.faculty_admin_roles: a grant added by
+    foreign key (or a pending delete) leaves that collection stale, which
+    silently desynchronised the flag. Flushing first makes the pending change
+    visible to the query.
+    """
+    db.session.flush()
+    has_grant = db.session.query(FacultyAdmin.id).filter_by(user_id=user.id).first() is not None
+    user.is_admin = bool(user.is_super_admin or has_grant)
 
 
 class Programme(db.Model):
@@ -467,29 +581,48 @@ DEV_ADMIN_CONTACTS = [
 ]
 
 
-def admin_notification_contacts():
-    """Admins currently subscribed to booking notifications.
+def admin_notification_contacts(faculty=None):
+    """Admins subscribed to notifications for `faculty`.
 
-    Returns a list of {"name", "email"} dicts, de-duplicated by address.
-    Admins without a deliverable address are skipped — 'admin' and 'dummy' style
-    accounts would otherwise be handed to the mailer as invalid recipients.
+    Activity belongs to exactly one faculty, so only that faculty's admins are
+    notified. Super admins are included for every faculty, since they administer
+    all of them; their subscription is their own `receives_admin_emails` flag,
+    while a faculty admin's is the per-grant flag on FacultyAdmin — so someone
+    administering two faculties can be notified about one and not the other.
+
+    Returns [{"name", "email"}], de-duplicated by address. Admins without a
+    deliverable address are skipped, rather than handed to the mailer.
+    Passing faculty=None falls back to every subscribed admin, which only
+    happens for mail that is not tied to a booking.
     """
     if LOCALHOST:
         return list(DEV_ADMIN_CONTACTS)
 
     contacts, seen = [], set()
-    for user in User.query.filter_by(is_admin=True, receives_admin_emails=True).all():
+
+    def add(user):
         email = user.notification_email
         if not email or email in seen:
-            continue
+            return
         seen.add(email)
         contacts.append({"name": user.display_name or email, "email": email})
+
+    for user in User.query.filter_by(is_super_admin=True, receives_admin_emails=True).all():
+        add(user)
+
+    q = FacultyAdmin.query.filter_by(receives_admin_emails=True)
+    if faculty is not None:
+        q = q.filter_by(faculty_id=faculty.id)
+    for role in q.all():
+        if role.user:
+            add(role.user)
 
     if not contacts:
         # Deliberate: respect an admin who switched everyone off rather than
         # resurrecting the seed list behind their back. Loud so it is diagnosable.
-        logger.warning("No admin is subscribed to booking notifications — "
-                       "admin emails will not be sent.")
+        logger.warning("No admin is subscribed to notifications for faculty %s — "
+                       "admin emails will not be sent.",
+                       faculty.code if faculty else "(any)")
     return contacts
 
 
@@ -510,7 +643,7 @@ def seed_admin_notification_contacts():
             ).first()
             if existing:
                 continue
-            db.session.add(User(
+            user = User(
                 username   = email,
                 email      = email,
                 # pbkdf2:sha256 like the SSO path — the default (scrypt) hash is
@@ -520,7 +653,13 @@ def seed_admin_notification_contacts():
                 is_admin   = True,
                 first_name = contact["name"],
                 receives_admin_emails = True,
-            ))
+            )
+            db.session.add(user)
+            db.session.flush()
+            fac = default_faculty()
+            if fac:
+                db.session.add(FacultyAdmin(user_id=user.id, faculty_id=fac.id,
+                                            receives_admin_emails=True))
             logger.info("Seeded admin notification contact: %s", email)
         db.session.commit()
 
@@ -550,6 +689,29 @@ def admin_required(f):
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
+
+
+def super_admin_required(f):
+    """Only super admins. Used for granting/revoking admin rights."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_super_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def require_faculty_admin(faculty):
+    """403 unless the current user administers `faculty` (super admins always do)."""
+    if not current_user.is_authenticated or not current_user.is_admin_of(faculty):
+        abort(403)
+
+
+def admin_faculties_for(user):
+    """Faculties whose admin area `user` may open, in tab order."""
+    if not user.is_authenticated:
+        return []
+    return sorted(user.admin_faculties, key=lambda f: (f.sort_order, f.id))
 
 
 @login_manager.user_loader
@@ -1078,8 +1240,9 @@ def book():
         recipients     = [{"name": borrower_name, "email": borrower_email}],
     )
 
-    # 2. Send admin notification with Approve / Deny action links
-    admin_contacts = admin_notification_contacts()
+    # 2. Send admin notification with Approve / Deny action links.
+    #    Only the admins of the faculty this booking belongs to.
+    admin_contacts = admin_notification_contacts(new_booking.faculty)
     approve_url = url_for('approve_booking', booking_id=new_booking.id, _external=True)
     deny_url    = url_for('deny_booking',    booking_id=new_booking.id, _external=True)
     send_email(
@@ -1337,6 +1500,8 @@ def remove_from_cart(item_id):
 def approve_booking(booking_id):
     """Admin accepts the request. The item stays reserved until it is collected."""
     booking = Booking.query.get_or_404(booking_id)
+    # An admin may only act on bookings belonging to a faculty they administer.
+    require_faculty_admin(booking.faculty)
 
     if booking.status in TERMINAL_STATUSES:
         flash(f'Booking {booking.id} is already {booking.status} and cannot be approved.', 'warning')
@@ -1357,6 +1522,7 @@ def approve_booking(booking_id):
         html_content   = "",
         items          = items_for_email,
         type_of_mail   = 'approved',
+        faculty        = booking.faculty,
     )
 
     flash(f'Booking {booking.id} approved — borrower notified to collect.', 'success')
@@ -1369,6 +1535,8 @@ def lend_item(booking_id):
     """Item physically handed over. Reachable from 'booked' too, so the admin can
     still lend in one step from the booking-request email."""
     booking = Booking.query.get_or_404(booking_id)
+    # An admin may only act on bookings belonging to a faculty they administer.
+    require_faculty_admin(booking.faculty)
 
     if booking.status in TERMINAL_STATUSES:
         flash(f'Booking {booking.id} is already {booking.status} and cannot be lent.', 'warning')
@@ -1389,6 +1557,7 @@ def lend_item(booking_id):
         html_content   = "",
         items          = items_for_email,
         type_of_mail   = 'lent',
+        faculty        = booking.faculty,
     )
 
     flash(f'Item {booking.item_name} marked as lent!', 'success')
@@ -1402,6 +1571,8 @@ def return_item(booking_id):
     rejects the request. The row is kept as history — the status change is what
     releases the item, since every availability query ignores terminal statuses."""
     booking = Booking.query.get_or_404(booking_id)
+    # An admin may only act on bookings belonging to a faculty they administer.
+    require_faculty_admin(booking.faculty)
 
     actionType = request.form.get("formAction")
     note       = request.form.get('note')
@@ -1436,6 +1607,7 @@ def return_item(booking_id):
             html_content   = "",
             items          = items_for_email,
             type_of_mail   = 'deny',
+        faculty        = booking.faculty,
             note           = note,
         )
     elif actionType == 'deny_no_note':
@@ -1452,6 +1624,7 @@ def return_item(booking_id):
             html_content   = "",
             items          = items_for_email,
             type_of_mail   = 'returned',
+        faculty        = booking.faculty,
         )
 
     if actionType in ('deny', 'deny_no_note'):
@@ -1498,6 +1671,7 @@ def add_item():
 def edit_item(item_id):
     if request.method == 'GET':
         item = Item.query.get_or_404(item_id)
+        require_faculty_admin(item.faculty)
         return render_template('edit_item.html', item=item,
                                locations=locations_for_faculty(item.faculty),
                                faculty=item.faculty)
@@ -1505,7 +1679,8 @@ def edit_item(item_id):
     if request.method == 'POST':
         name        = request.form.get('name')
         location    = request.form.get('location')
-        existing_item = Item.query.get(item_id)
+        existing_item = Item.query.get_or_404(item_id)
+        require_faculty_admin(existing_item.faculty)
         existing_item.name        = name
         existing_item.location    = location
         existing_item.is_bookable = 'is_bookable' in request.form
@@ -1521,6 +1696,7 @@ def edit_item(item_id):
 @admin_required
 def delete_item(item_id):
     item = Item.query.get_or_404(item_id)
+    require_faculty_admin(item.faculty)
     name = item.name
     db.session.delete(item)
     db.session.commit()
@@ -1734,6 +1910,8 @@ def bookings_admin():
 @admin_required
 def booking_detail_json(booking_id):
     booking = Booking.query.get_or_404(booking_id)
+    # An admin may only act on bookings belonging to a faculty they administer.
+    require_faculty_admin(booking.faculty)
     if booking.booking_items:
         items = [
             {
@@ -1820,7 +1998,7 @@ def check_and_send_reminders_tomorrow():
         logger.info(f'Sending reminders finished.')
 
 
-def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, return_date, subject, text_content, html_content, items, type_of_mail=None, recipients=None, **kargs):
+def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, return_date, subject, text_content, html_content, items, type_of_mail=None, recipients=None, faculty=None, **kargs):
     mail_body = {}
     
     logger.info(f"Attempting to email {borrower_email} for {type_of_mail}")
@@ -1913,8 +2091,8 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
     mail_from = "booking@ideas-block.com"
     name_from = "MISC booking - DO NOT Reply"
 
-    # Admins subscribed to notifications (per-admin toggle in the dashboard)
-    admin_contacts = admin_notification_contacts()
+    # Admins subscribed to notifications for the faculty the activity came from
+    admin_contacts = admin_notification_contacts(faculty)
 
     if recipients is not None:
         # Caller supplied explicit recipient list — use it directly
@@ -1968,11 +2146,39 @@ def send_email(borrower_email, borrower_name, borrower_phone, borrow_date, retur
 @admin_required
 def admin_dashboard():
     section = request.args.get('section', 'bookings')
-    faculty = current_faculty()
-    data = {'section': section, 'faculty': faculty, 'faculties': all_faculties()}
+
+    # The dashboard always shows exactly one faculty.
+    #   ?faculty=<code> asked for explicitly  -> refuse if it is not theirs,
+    #                                            rather than quietly showing
+    #                                            different data than the URL says
+    #   nothing asked for                     -> use the remembered faculty, or
+    #                                            fall back to their first, since a
+    #                                            stale session is not a request
+    my_faculties = admin_faculties_for(current_user)
+    requested_code = request.args.get('faculty')
+    if requested_code:
+        faculty = Faculty.query.filter_by(code=requested_code).first()
+        if faculty is None:
+            abort(404)
+        require_faculty_admin(faculty)
+        session['faculty_code'] = faculty.code
+    else:
+        faculty = current_faculty()
+        if faculty is None or not current_user.is_admin_of(faculty):
+            faculty = my_faculties[0] if my_faculties else None
+            if faculty is None:
+                abort(403)
+            session['faculty_code'] = faculty.code
+    require_faculty_admin(faculty)
+
+    data = {'section': section, 'faculty': faculty, 'faculties': my_faculties,
+            'all_faculty_list': all_faculties()}
+    fac_booking = faculty_filter(Booking.faculty_id, faculty)
+
     if section == 'bookings':
-        data['bookings'] = Booking.query.order_by(Booking.id.desc()).all()
+        data['bookings'] = Booking.query.filter(fac_booking).order_by(Booking.id.desc()).all()
     elif section == 'users':
+        # Users are global, but only a super admin may change roles.
         data['users'] = User.query.order_by(User.username).all()
     elif section == 'locations':
         data['locations'] = locations_for_faculty(data['faculty'])
@@ -1987,7 +2193,7 @@ def admin_dashboard():
         # Full booking log: every booking ever made, including terminal ones.
         # Optional ?status= filter; 'all' (or absent) shows everything.
         status_filter = request.args.get('status', 'all')
-        query = Booking.query
+        query = Booking.query.filter(fac_booking)
         if status_filter in ALL_STATUSES:
             query = query.filter(Booking.status == status_filter)
             data['status_filter'] = status_filter
@@ -1997,9 +2203,9 @@ def admin_dashboard():
         data['all_statuses']  = ALL_STATUSES
         data['status_counts'] = dict(
             db.session.query(Booking.status, db.func.count(Booking.id))
-                      .group_by(Booking.status).all()
+                      .filter(fac_booking).group_by(Booking.status).all()
         )
-        data['total_bookings'] = Booking.query.count()
+        data['total_bookings'] = Booking.query.filter(fac_booking).count()
     return render_template('admin_dashboard.html', **data)
 
 
@@ -2039,6 +2245,49 @@ def admin_delete_user(user_id):
     return redirect(url_for('admin_dashboard', section='users'))
 
 
+@app.route('/admin/toggle_faculty_admin/<int:user_id>/<int:faculty_id>', methods=['POST'])
+@super_admin_required
+def admin_toggle_faculty_admin(user_id, faculty_id):
+    """Grant or revoke admin rights over one faculty. Super admins only."""
+    user = User.query.get_or_404(user_id)
+    faculty = Faculty.query.get_or_404(faculty_id)
+
+    role = user.admin_role_for(faculty)
+    if role:
+        db.session.delete(role)
+        flash(f'"{user.username}" is no longer an admin of {faculty.short_name}.', 'success')
+    else:
+        db.session.add(FacultyAdmin(user_id=user.id, faculty_id=faculty.id,
+                                    receives_admin_emails=True))
+        flash(f'"{user.username}" is now an admin of {faculty.short_name}.', 'success')
+
+    refresh_admin_flag(user)
+    db.session.commit()
+    return redirect(request.referrer or url_for('admin_dashboard', section='users'))
+
+
+@app.route('/admin/toggle_super_admin/<int:user_id>', methods=['POST'])
+@super_admin_required
+def admin_toggle_super_admin(user_id):
+    """Promote or demote a super admin. Super admins only."""
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('You cannot change your own super admin status.', 'danger')
+        return redirect(request.referrer or url_for('admin_dashboard', section='users'))
+
+    if user.is_super_admin and User.query.filter_by(is_super_admin=True).count() <= 1:
+        # Never leave the system without anyone who can grant rights.
+        flash('This is the last super admin — promote someone else first.', 'danger')
+        return redirect(request.referrer or url_for('admin_dashboard', section='users'))
+
+    user.is_super_admin = not user.is_super_admin
+    refresh_admin_flag(user)
+    db.session.commit()
+    flash(f'"{user.username}" {"is now a super admin" if user.is_super_admin else "is no longer a super admin"}.',
+          'success')
+    return redirect(request.referrer or url_for('admin_dashboard', section='users'))
+
+
 @app.route('/admin/toggle_admin/<int:user_id>', methods=['POST'])
 @admin_required
 def admin_toggle_admin(user_id):
@@ -2061,7 +2310,16 @@ def admin_toggle_admin_emails(user_id):
         flash(f'"{user.username}" is not an admin, so they receive no admin emails.', 'warning')
         return redirect(url_for('admin_dashboard', section='users'))
 
-    user.receives_admin_emails = not user.receives_admin_emails
+    faculty = current_faculty()
+    role = user.admin_role_for(faculty)
+    if role is not None:
+        # Faculty admins subscribe per grant, so one faculty can be muted
+        # without affecting the other.
+        role.receives_admin_emails = not role.receives_admin_emails
+        user.receives_admin_emails = role.receives_admin_emails
+    else:
+        # Super admins (and legacy rows) use the flag on the user.
+        user.receives_admin_emails = not user.receives_admin_emails
     db.session.commit()
 
     if user.receives_admin_emails and not user.notification_email:
@@ -2118,6 +2376,8 @@ def admin_edit_programme(programme_id):
 @admin_required
 def deny_booking(booking_id):
     booking = Booking.query.get_or_404(booking_id)
+    # An admin may only act on bookings belonging to a faculty they administer.
+    require_faculty_admin(booking.faculty)
     return render_template('deny_booking.html', booking=booking)
 
 
@@ -2183,6 +2443,7 @@ if __name__ == '__main__':
 
     create_default_faculties()
     backfill_faculty_assignments()
+    migrate_admin_roles_to_faculties()
     create_admin_user()
     create_default_locations()
     create_default_programmes()

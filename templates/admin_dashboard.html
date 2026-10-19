@@ -4,7 +4,7 @@
 
 {% block content %}
 
-{% set admin_dash_next = url_for('admin_dashboard', section='locations') %}
+{% set admin_dash_next = url_for('admin_dashboard', section='locations', faculty=faculty.code if faculty else None) %}
 
 <!-- Mobile sidebar toggle -->
 <button class="btn btn-outline-secondary d-lg-none mb-3" type="button"
@@ -22,20 +22,36 @@
         {% include '_admin_sidebar_links.html' ignore missing %}
         <nav class="nav flex-column p-3">
             <a class="nav-link {% if section == 'bookings' %}fw-bold{% endif %}"
-               href="{{ url_for('admin_dashboard', section='bookings') }}">All Bookings</a>
+               href="{{ url_for('admin_dashboard', section='bookings', faculty=faculty.code if faculty else None) }}">All Bookings</a>
             <a class="nav-link {% if section == 'users' %}fw-bold{% endif %}"
-               href="{{ url_for('admin_dashboard', section='users') }}">Users</a>
+               href="{{ url_for('admin_dashboard', section='users', faculty=faculty.code if faculty else None) }}">Users</a>
             <a class="nav-link {% if section == 'locations' %}fw-bold{% endif %}"
-               href="{{ url_for('admin_dashboard', section='locations') }}">Locations</a>
+               href="{{ url_for('admin_dashboard', section='locations', faculty=faculty.code if faculty else None) }}">Locations</a>
             <a class="nav-link {% if section == 'programmes' %}fw-bold{% endif %}"
-               href="{{ url_for('admin_dashboard', section='programmes') }}">Programmes</a>
+               href="{{ url_for('admin_dashboard', section='programmes', faculty=faculty.code if faculty else None) }}">Programmes</a>
             <a class="nav-link {% if section == 'items' %}fw-bold{% endif %}"
-               href="{{ url_for('admin_dashboard', section='items') }}">Items</a>
+               href="{{ url_for('admin_dashboard', section='items', faculty=faculty.code if faculty else None) }}">Items</a>
             <a class="nav-link {% if section == 'history' %}fw-bold{% endif %}"
-               href="{{ url_for('admin_dashboard', section='history') }}">History</a>
+               href="{{ url_for('admin_dashboard', section='history', faculty=faculty.code if faculty else None) }}">History</a>
         </nav>
     </div>
 </div>
+
+{# Which faculty's admin area this is. Only faculties the current admin may
+   open are listed; a super admin sees all three. #}
+{% if faculties and faculties | length > 1 %}
+<ul class="nav nav-pills mb-3" id="adminFacultyTabs">
+    {% for f in faculties %}
+    <li class="nav-item">
+        <a class="nav-link {% if faculty and f.id == faculty.id %}active{% endif %}"
+           href="{{ url_for('admin_dashboard', section=section, faculty=f.code) }}"
+           title="{{ f.name }}">{{ f.short_name }}</a>
+    </li>
+    {% endfor %}
+</ul>
+{% elif faculty %}
+<p class="text-muted small mb-3">Administering <strong>{{ faculty.short_name }}</strong></p>
+{% endif %}
 
 <div class="row">
     <!-- Persistent sidebar (desktop) -->
@@ -44,17 +60,17 @@
             <h6 class="text-uppercase text-muted small px-2 mb-2">Admin</h6>
             <nav class="nav flex-column">
                 <a class="nav-link {% if section == 'bookings' %}fw-bold text-primary{% endif %}"
-                   href="{{ url_for('admin_dashboard', section='bookings') }}">All Bookings</a>
+                   href="{{ url_for('admin_dashboard', section='bookings', faculty=faculty.code if faculty else None) }}">All Bookings</a>
                 <a class="nav-link {% if section == 'users' %}fw-bold text-primary{% endif %}"
-                   href="{{ url_for('admin_dashboard', section='users') }}">Users</a>
+                   href="{{ url_for('admin_dashboard', section='users', faculty=faculty.code if faculty else None) }}">Users</a>
                 <a class="nav-link {% if section == 'locations' %}fw-bold text-primary{% endif %}"
-                   href="{{ url_for('admin_dashboard', section='locations') }}">Locations</a>
+                   href="{{ url_for('admin_dashboard', section='locations', faculty=faculty.code if faculty else None) }}">Locations</a>
                 <a class="nav-link {% if section == 'programmes' %}fw-bold text-primary{% endif %}"
-                   href="{{ url_for('admin_dashboard', section='programmes') }}">Programmes</a>
+                   href="{{ url_for('admin_dashboard', section='programmes', faculty=faculty.code if faculty else None) }}">Programmes</a>
                 <a class="nav-link {% if section == 'items' %}fw-bold text-primary{% endif %}"
-                   href="{{ url_for('admin_dashboard', section='items') }}">Items</a>
+                   href="{{ url_for('admin_dashboard', section='items', faculty=faculty.code if faculty else None) }}">Items</a>
                 <a class="nav-link {% if section == 'history' %}fw-bold text-primary{% endif %}"
-                   href="{{ url_for('admin_dashboard', section='history') }}">History</a>
+                   href="{{ url_for('admin_dashboard', section='history', faculty=faculty.code if faculty else None) }}">History</a>
             </nav>
         </div>
     </div>
@@ -268,7 +284,8 @@
                     <th>Username</th>
                     <th>Name</th>
                     <th>Course</th>
-                    <th style="white-space:nowrap; width:1%;">Admin</th>
+                    <th style="white-space:nowrap; width:1%;">Super</th>
+                    <th style="white-space:nowrap;">Faculty&nbsp;admin</th>
                     <th style="white-space:nowrap; width:1%;">Admin&nbsp;emails</th>
                     <th style="white-space:nowrap; width:1%;">Actions</th>
                 </tr>
@@ -280,24 +297,67 @@
                     <td>{{ u.username }}</td>
                     <td>{{ (u.first_name or '') + ' ' + (u.last_name or '') }}</td>
                     <td>{{ u.course or '' }}</td>
+                    {# Super admin: administers every faculty and is the only role
+                       that can grant or revoke rights. Only a super admin sees controls. #}
                     <td style="white-space:nowrap; width:1%;">
-                        <form style="display:contents;" method="post" action="{{ url_for('admin_toggle_admin', user_id=u.id) }}">
-                            <button type="submit" class="btn btn-sm {% if u.is_admin %}btn-success{% else %}btn-outline-secondary{% endif %}">
-                                {{ 'Yes' if u.is_admin else 'No' }}
+                        {% if current_user.is_super_admin and u.id != current_user.id %}
+                        <form style="display:contents;" method="post"
+                              action="{{ url_for('admin_toggle_super_admin', user_id=u.id) }}">
+                            <button type="submit"
+                                    class="btn btn-sm {% if u.is_super_admin %}btn-warning{% else %}btn-outline-secondary{% endif %}"
+                                    title="{% if u.is_super_admin %}Revoke super admin{% else %}Make super admin{% endif %}">
+                                {{ 'Super' if u.is_super_admin else '—' }}
                             </button>
                         </form>
+                        {% elif u.is_super_admin %}
+                        <span class="badge bg-warning text-dark">Super</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    {# One chip per faculty. Super admins implicitly administer all,
+                       so their chips are shown as inherited rather than toggleable. #}
+                    <td style="white-space:nowrap;">
+                        {% if u.is_super_admin %}
+                        <span class="text-muted small">all faculties (super)</span>
+                        {% else %}
+                        <div class="d-flex flex-wrap gap-1">
+                        {% for f in all_faculty_list %}
+                            {% set granted = u.is_admin_of(f) %}
+                            {% if current_user.is_super_admin %}
+                            <form style="display:contents;" method="post"
+                                  action="{{ url_for('admin_toggle_faculty_admin', user_id=u.id, faculty_id=f.id) }}">
+                                <button type="submit"
+                                        class="btn btn-sm {% if granted %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                                        title="{% if granted %}Revoke{% else %}Grant{% endif %} admin of {{ f.name }}">
+                                    {{ f.short_name }}
+                                </button>
+                            </form>
+                            {% elif granted %}
+                            <span class="badge bg-success">{{ f.short_name }}</span>
+                            {% endif %}
+                        {% endfor %}
+                        {% if not current_user.is_super_admin and not u.is_admin %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                        </div>
+                        {% endif %}
                     </td>
                     <td style="white-space:nowrap; width:1%;">
+                        {# Subscription is per grant, so this reflects THIS faculty.
+                           Super admins use their single user-level flag. #}
+                        {% set role = u.admin_role_for(faculty) %}
+                        {% set subscribed = role.receives_admin_emails if role else u.receives_admin_emails %}
                         {% if u.is_admin %}
                         <form style="display:contents;" method="post"
-                              action="{{ url_for('admin_toggle_admin_emails', user_id=u.id) }}">
+                              action="{{ url_for('admin_toggle_admin_emails', user_id=u.id, faculty=faculty.code if faculty else None) }}">
                             <button type="submit"
-                                    class="btn btn-sm {% if u.receives_admin_emails %}btn-success{% else %}btn-outline-secondary{% endif %}"
-                                    title="{% if u.receives_admin_emails %}Receives booking notifications — click to unsubscribe{% else %}Not receiving booking notifications — click to subscribe{% endif %}">
-                                {{ 'On' if u.receives_admin_emails else 'Off' }}
+                                    class="btn btn-sm {% if subscribed %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                                    title="{% if role %}Notifications for {{ faculty.short_name }}{% else %}Notifications (all faculties){% endif %} — click to toggle">
+                                {{ 'On' if subscribed else 'Off' }}
                             </button>
                         </form>
-                        {% if u.receives_admin_emails and not u.notification_email %}
+                        {% if subscribed and not u.notification_email %}
                         <span class="badge bg-warning text-dark ms-1"
                               title="Subscribed, but this account has no valid email address, so nothing can be delivered.">no email</span>
                         {% endif %}
@@ -334,7 +394,7 @@
         <div class="row mb-4">
             <div class="col-md-6">
                 <form method="post" action="{{ url_for('add_location') }}" class="d-flex gap-2">
-                    <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='locations') }}">
+                    <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='locations', faculty=faculty.code if faculty else None) }}">
                     <input type="text" name="name" class="form-control" placeholder="New location name" required>
                     <button type="submit" class="btn btn-primary">Add</button>
                 </form>
@@ -353,7 +413,7 @@
                         <span class="loc-name" id="loc-name-{{ loc.id }}">{{ loc.name }}</span>
                         <form class="loc-edit-form d-none" id="loc-edit-form-{{ loc.id }}"
                               method="post" action="{{ url_for('edit_location', location_id=loc.id) }}">
-                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='locations') }}">
+                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='locations', faculty=faculty.code if faculty else None) }}">
                             <div class="d-flex gap-1">
                                 <input type="text" name="name" class="form-control form-control-sm"
                                        value="{{ loc.name }}" required>
@@ -368,7 +428,7 @@
                                 id="loc-edit-btn-{{ loc.id }}"
                                 onclick="startLocEdit({{ loc.id }})">Edit</button>
                         <form method="post" action="{{ url_for('delete_location', location_id=loc.id) }}" style="display:contents;">
-                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='locations') }}">
+                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='locations', faculty=faculty.code if faculty else None) }}">
                             <button type="submit" class="btn btn-danger btn-sm"
                                     onclick="return confirm('Delete \'{{ loc.name }}\'?')">&#128465;</button>
                         </form>
@@ -484,7 +544,7 @@
             <div class="card-header">Add Item</div>
             <div class="card-body">
                 <form method="post" action="{{ url_for('add_item') }}" class="row g-2 align-items-center">
-                    <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='items') }}">
+                    <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='items', faculty=faculty.code if faculty else None) }}">
                     <div class="col-md-4">
                         <input type="text" name="name" class="form-control" placeholder="Item name" required>
                     </div>
@@ -534,7 +594,7 @@
                     <td style="white-space:nowrap; width:1%;">
                         <a href="{{ url_for('edit_item', item_id=item.id) }}" class="btn btn-outline-primary btn-sm">Edit</a>
                         <form method="post" action="{{ url_for('delete_item', item_id=item.id) }}" style="display:contents;">
-                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='items') }}">
+                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='items', faculty=faculty.code if faculty else None) }}">
                             <button type="submit" class="btn btn-danger btn-sm"
                                     onclick="return confirm('Delete \'{{ item.name }}\'?')">&#128465;</button>
                         </form>
@@ -559,7 +619,7 @@
         </div>
 
         <div class="mb-3 d-flex flex-wrap gap-2">
-            <a href="{{ url_for('admin_dashboard', section='history') }}"
+            <a href="{{ url_for('admin_dashboard', section='history', faculty=faculty.code if faculty else None) }}"
                class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
                 All <span class="badge bg-light text-dark ms-1">{{ total_bookings }}</span>
             </a>

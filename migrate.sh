@@ -203,6 +203,16 @@ if [[ "$DRY_RUN" != "1" ]]; then
     success "Admin notification contacts seeded."
 fi
 
+# ── Convert admin flags into per-faculty roles ─────────────────────────────
+echo ""
+info "Migrating admin rights to per-faculty roles..."
+
+run python -c '"from main import migrate_admin_roles_to_faculties; migrate_admin_roles_to_faculties()"'
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Admin roles migrated."
+fi
+
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Locations seeded."
 fi
