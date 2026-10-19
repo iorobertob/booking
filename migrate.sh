@@ -20,11 +20,24 @@ warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 die()     { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 
 DRY_RUN="${DRY_RUN:-0}"
+# Runs a command, or prints it under DRY_RUN. Executes "$@" directly rather
+# than via eval: eval re-parses its arguments, which silently mangled the
+# quoting of multi-line commands and aborted the script mid-deploy.
+# Redirection cannot go through here — see dump_database() below.
 run() {
     if [[ "$DRY_RUN" == "1" ]]; then
         echo -e "${YELLOW}[DRY-RUN]${RESET} $*"
     else
-        eval "$@"
+        "$@"
+    fi
+}
+
+# Runs a python snippet against the app, for the seeders.
+run_py() {
+    if [[ "$DRY_RUN" == "1" ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${RESET} python -c '$1'"
+    else
+        python -c "$1"
     fi
 }
 
@@ -89,14 +102,18 @@ BACKUP_FILE="${BACKUP_DIR}/booking_dump_${TIMESTAMP}.sql"
 echo ""
 info "Step 1/4 — Dumping database to ${BOLD}${BACKUP_FILE}${RESET}"
 
-run mysqldump \
-    --user="$DB_USER" \
-    --password="$DB_PASS" \
-    --single-transaction \
-    --routines \
-    --triggers \
-    --add-drop-table \
-    "$DB_NAME_VAL" \> "$BACKUP_FILE"
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo -e "${YELLOW}[DRY-RUN]${RESET} mysqldump ... > ${BACKUP_FILE}"
+else
+    mysqldump \
+        --user="$DB_USER" \
+        --password="$DB_PASS" \
+        --single-transaction \
+        --routines \
+        --triggers \
+        --add-drop-table \
+        "$DB_NAME_VAL" > "$BACKUP_FILE"
+fi
 
 if [[ "$DRY_RUN" != "1" ]]; then
     [[ -s "$BACKUP_FILE" ]] || die "Dump file is empty — aborting before migration."
@@ -153,15 +170,7 @@ fi
 echo ""
 info "Fixing NULL is_bookable values on existing items..."
 
-run python -c "
-from main import app, db
-from sqlalchemy import text
-with app.app_context():
-    with db.engine.connect() as conn:
-        result = conn.execute(text('UPDATE item SET is_bookable=1 WHERE is_bookable IS NULL'))
-        conn.commit()
-        print(f'  Updated {result.rowcount} row(s).')
-"
+run_py "from main import fix_null_is_bookable; fix_null_is_bookable()"
 
 if [[ "$DRY_RUN" != "1" ]]; then
     success "NULL is_bookable values fixed."
@@ -171,7 +180,7 @@ fi
 echo ""
 info "Seeding faculties (MISC, KIMO, Theatre & Dance) if not already present..."
 
-run python -c '"from main import create_default_faculties; create_default_faculties()"'
+run_py "from main import create_default_faculties; create_default_faculties()"
 
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Faculties seeded."
@@ -181,7 +190,7 @@ fi
 echo ""
 info "Assigning items, locations and bookings without a faculty to the default..."
 
-run python -c '"from main import backfill_faculty_assignments; backfill_faculty_assignments()"'
+run_py "from main import backfill_faculty_assignments; backfill_faculty_assignments()"
 
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Faculty backfill complete."
@@ -191,13 +200,13 @@ fi
 echo ""
 info "Seeding default locations (A, B, C) if not already present..."
 
-run python -c '"from main import app, create_default_locations; create_default_locations()"'
+run_py "from main import app, create_default_locations; create_default_locations()"
 
 # ── Seed admin notification contacts ───────────────────────────────────────
 echo ""
 info "Seeding admin notification contacts (previously hardcoded in main.py)..."
 
-run python -c '"from main import seed_admin_notification_contacts; seed_admin_notification_contacts()"'
+run_py "from main import seed_admin_notification_contacts; seed_admin_notification_contacts()"
 
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Admin notification contacts seeded."
@@ -207,7 +216,7 @@ fi
 echo ""
 info "Migrating admin rights to per-faculty roles..."
 
-run python -c '"from main import migrate_admin_roles_to_faculties; migrate_admin_roles_to_faculties()"'
+run_py "from main import migrate_admin_roles_to_faculties; migrate_admin_roles_to_faculties()"
 
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Admin roles migrated."
@@ -217,7 +226,7 @@ fi
 echo ""
 info "Linking older bookings to the accounts that made them..."
 
-run python -c '"from main import backfill_booking_users; backfill_booking_users()"'
+run_py "from main import backfill_booking_users; backfill_booking_users()"
 
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Booking authorship backfilled."

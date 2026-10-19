@@ -541,6 +541,20 @@ sudo systemctl restart booking.service
 
 ## Changelog
 
+### v4.0.1 — 2026-10-19 — migrate.sh seeders never ran
+- **`migrate.sh` aborted silently on every real run.** Its `run()` helper used `eval "$@"`, which
+  re-parses its arguments and destroyed the quoting of the one multi-line command — the `is_bookable`
+  fix. That failed with `Argument expected for the -c option`, and because the script runs under
+  `set -e` everything after it was skipped: all the seeders, and (via `deploy.sh`) the service restart.
+  `DRY_RUN=1` only echoes commands, so it never surfaced in a dry run.
+  - Consequence: after deploying the faculty work, no faculties were seeded. With zero faculties the
+    homepage renders **no tabs and all items**, i.e. indistinguishable from the old version — which is
+    exactly how the broken deploy looked like "nothing changed".
+- `run()` now executes `"$@"` directly; `run_py` runs seeder snippets; the backup does its own
+  redirection, which cannot pass through either helper.
+- The inline SQL became `fix_null_is_bookable()` in `main.py`, matching every other data fix.
+- Verified by running `migrate.sh` for real (not `DRY_RUN`) end to end for the first time.
+
 ### v4.0 phases 3 & 4 — 2026-10-19 — Borrower profiles; All Bookings is active-only
 - **`/user/<id>` — borrower profile.** Shows that person's whole borrowing record **across every
   faculty**, with per-status tallies and inline denial reasons. Visible to the person themselves and to

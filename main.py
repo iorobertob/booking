@@ -258,6 +258,19 @@ def migrate_admin_roles_to_faculties():
         print(f"  {granted} faculty admin grant(s), {promoted} super admin(s).")
 
 
+def fix_null_is_bookable():
+    """Older items predate Item.is_bookable and may hold NULL; treat them as bookable.
+
+    Previously inlined as a multi-line `python -c` in migrate.sh, where the
+    run() helper's eval destroyed its quoting and aborted the whole script.
+    """
+    with app.app_context():
+        n = Item.query.filter(Item.is_bookable.is_(None)).update(
+            {Item.is_bookable: True}, synchronize_session=False)
+        db.session.commit()
+        print(f"  Updated {n} row(s).")
+
+
 def backfill_booking_users():
     """Link older bookings to the account that made them, by email.
 
