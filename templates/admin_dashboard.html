@@ -80,7 +80,13 @@
 
         {# ── BOOKINGS ──────────────────────────────────────────────── #}
         {% if section == 'bookings' %}
-        <h4 class="mb-3">All Bookings</h4>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h4 class="mb-0">All Bookings</h4>
+            <span class="text-muted small">
+                Active bookings only —
+                <a href="{{ url_for('admin_dashboard', section='history', faculty=faculty.code if faculty else None) }}">returned and denied are in History</a>.
+            </span>
+        </div>
         <div class="table-responsive">
         <table id="bookingsAdminTable" class="table table-striped table-hover">
             <thead>
@@ -99,7 +105,12 @@
                 <tr class="booking-row" data-booking-id="{{ booking.id }}" style="cursor:pointer;">
                     <td>{{ booking.id }}</td>
                     <td>{{ booking.borrow_date.strftime('%Y-%m-%d') if booking.borrow_date else '' }}</td>
-                    <td>{{ booking.borrower_name }}</td>
+                    <td>
+                        {% if booking.user_id %}
+                        <a href="{{ url_for('user_profile', user_id=booking.user_id) }}"
+                           onclick="event.stopPropagation()" title="Borrowing record and notes">{{ booking.borrower_name }}</a>
+                        {% else %}{{ booking.borrower_name }}{% endif %}
+                    </td>
                     <td>{{ booking.borrower_email }}</td>
                     <td>
                         {% if booking.booking_items %}
@@ -294,7 +305,7 @@
                 {% for u in users %}
                 <tr>
                     <td>{{ u.id }}</td>
-                    <td>{{ u.username }}</td>
+                    <td><a href="{{ url_for('user_profile', user_id=u.id) }}">{{ u.username }}</a></td>
                     <td>{{ (u.first_name or '') + ' ' + (u.last_name or '') }}</td>
                     <td>{{ u.course or '' }}</td>
                     {# Super admin: administers every faculty and is the only role
@@ -654,7 +665,11 @@
                     <td data-order="{{ b.created_at.isoformat() if b.created_at else '' }}">
                         {{ b.created_at.strftime('%Y-%m-%d %H:%M') if b.created_at else '—' }}
                     </td>
-                    <td>{{ b.borrower_name }}</td>
+                    <td>
+                        {% if b.user_id %}
+                        <a href="{{ url_for('user_profile', user_id=b.user_id) }}">{{ b.borrower_name }}</a>
+                        {% else %}{{ b.borrower_name }}{% endif %}
+                    </td>
                     <td>{{ b.borrower_email }}</td>
                     <td>
                         {% if b.booking_items %}

@@ -213,6 +213,16 @@ if [[ "$DRY_RUN" != "1" ]]; then
     success "Admin roles migrated."
 fi
 
+# ── Link older bookings to user accounts ───────────────────────────────────
+echo ""
+info "Linking older bookings to the accounts that made them..."
+
+run python -c '"from main import backfill_booking_users; backfill_booking_users()"'
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Booking authorship backfilled."
+fi
+
 if [[ "$DRY_RUN" != "1" ]]; then
     success "Locations seeded."
 fi

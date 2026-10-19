@@ -258,6 +258,47 @@ def migrate_admin_roles_to_faculties():
         print(f"  {granted} faculty admin grant(s), {promoted} super admin(s).")
 
 
+def backfill_booking_users():
+    """Link older bookings to the account that made them, by email.
+
+    Pre-dates Booking.user_id. Matches user_email first (set from the session at
+    booking time) and falls back to borrower_email. Ambiguous or unmatched rows
+    are left NULL rather than guessed at — the profile falls back to matching on
+    email for those.
+    """
+    with app.app_context():
+        by_email = {}
+        for u in User.query.all():
+            for addr in {(u.email or '').lower(), (u.username or '').lower()}:
+                if addr:
+                    by_email.setdefault(addr, []).append(u)
+
+        linked = 0
+        for b in Booking.query.filter(Booking.user_id.is_(None)).all():
+            for addr in ((b.user_email or '').lower(), (b.borrower_email or '').lower()):
+                matches = by_email.get(addr, [])
+                if len(matches) == 1:
+                    b.user_id = matches[0].id
+                    linked += 1
+                    break
+        db.session.commit()
+        print(f"  Linked {linked} older booking(s) to a user account.")
+
+
+def bookings_for_user(user):
+    """Every booking this person made, newest first, across all faculties.
+
+    Matches the account link where present and falls back to their addresses, so
+    bookings made before Booking.user_id existed still appear.
+    """
+    addresses = {a.lower() for a in (user.email, user.username) if a}
+    conditions = [Booking.user_id == user.id]
+    if addresses:
+        conditions.append(db.func.lower(Booking.user_email).in_(addresses))
+        conditions.append(db.func.lower(Booking.borrower_email).in_(addresses))
+    return Booking.query.filter(db.or_(*conditions)).order_by(Booking.id.desc()).all()
+
+
 def faculty_filter(column, faculty):
     """Restrict `column` to `faculty`.
 
@@ -344,6 +385,11 @@ class Booking(db.Model):
     # single answer. Enforced when the booking is created.
     faculty_id        = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True, index=True)
     faculty           = db.relationship('Faculty')
+    # Who placed the booking. Backfilled for older rows by matching the stored
+    # email; the column exists because matching addresses is unreliable once a
+    # person has both an SSO and a local account.
+    user_id           = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
+    user              = db.relationship('User', backref='bookings_made')
     booking_items   = db.relationship('BookingItem', back_populates='booking', cascade='all, delete-orphan')
     item            = db.relationship('Item',   back_populates='bookings')
 
@@ -521,6 +567,49 @@ def refresh_admin_flag(user):
     db.session.flush()
     has_grant = db.session.query(FacultyAdmin.id).filter_by(user_id=user.id).first() is not None
     user.is_admin = bool(user.is_super_admin or has_grant)
+
+
+class ProfileComment(db.Model):
+    """A note on a borrower's profile, and the replies to it.
+
+    Admins of ANY faculty may post, and all admins can read — that is the point:
+    a borrower's record follows them across faculties. Top-level comments are
+    written by admins; the borrower may reply to them, so a note about a damaged
+    item is not one-sided.
+    """
+    __tablename__ = 'profile_comment'
+    id           = db.Column(db.Integer, primary_key=True)
+    # Whose profile this is written on.
+    subject_id   = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'),
+                             nullable=False, index=True)
+    author_id    = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    # Faculty the author wrote on behalf of, recorded at the time so the note
+    # still reads correctly if their roles change later.
+    faculty_id   = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True)
+    body         = db.Column(db.Text, nullable=False)
+    created_at   = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    # NULL for an admin's note; set on a reply to it.
+    parent_id    = db.Column(db.Integer, db.ForeignKey('profile_comment.id', ondelete='CASCADE'),
+                             nullable=True, index=True)
+
+    subject = db.relationship('User', foreign_keys=[subject_id],
+                              backref=db.backref('profile_comments', cascade='all, delete-orphan'))
+    author  = db.relationship('User', foreign_keys=[author_id])
+    faculty = db.relationship('Faculty')
+    replies = db.relationship('ProfileComment', backref=db.backref('parent', remote_side=[id]),
+                              cascade='all, delete-orphan', order_by='ProfileComment.created_at')
+
+    @property
+    def author_label(self):
+        """How the author is shown: name plus the faculty they wrote for."""
+        if not self.author:
+            return "(deleted user)"
+        who = self.author.display_name or self.author.username
+        if self.author_id == self.subject_id:
+            return f"{who} (borrower)"
+        if self.faculty:
+            return f"{who} — {self.faculty.short_name} admin"
+        return who
 
 
 class Programme(db.Model):
@@ -1198,6 +1287,7 @@ def book():
         item_id        = first_item.id,
         item_name      = first_item.name,
         faculty_id     = booking_faculty_id,
+        user_id        = current_user.id if current_user.is_authenticated else None,
         borrower_name  = borrower_name,
         borrower_email = borrower_email,
         borrower_phone = borrower_phone,
@@ -2176,7 +2266,13 @@ def admin_dashboard():
     fac_booking = faculty_filter(Booking.faculty_id, faculty)
 
     if section == 'bookings':
-        data['bookings'] = Booking.query.filter(fac_booking).order_by(Booking.id.desc()).all()
+        # Active bookings only. Returned and denied ones are closed records and
+        # belong in History, which keeps this a working list rather than an
+        # ever-growing archive.
+        data['bookings'] = Booking.query.filter(
+            fac_booking,
+            Booking.status.in_(ACTIVE_STATUSES),
+        ).order_by(Booking.id.desc()).all()
     elif section == 'users':
         # Users are global, but only a super admin may change roles.
         data['users'] = User.query.order_by(User.username).all()
@@ -2385,6 +2481,98 @@ def deny_booking(booking_id):
 # User profile
 # ---------------------------------------------------------------------------
 
+# ── Borrower profiles ─────────────────────────────────────────────────────────
+
+def can_view_profile(user):
+    """The person themselves, or any admin of any faculty.
+
+    Deliberately not scoped to one faculty: the whole point of the shared record
+    is that a Theatre admin can see how someone treated MISC's equipment.
+    """
+    if not current_user.is_authenticated:
+        return False
+    return current_user.id == user.id or current_user.is_admin
+
+
+@app.route('/user/<int:user_id>')
+@login_required
+def user_profile(user_id):
+    """Borrowing record and admin notes for one person."""
+    user = User.query.get_or_404(user_id)
+    if not can_view_profile(user):
+        abort(403)
+
+    comments = (ProfileComment.query
+                .filter_by(subject_id=user.id, parent_id=None)
+                .order_by(ProfileComment.created_at.desc())
+                .all())
+
+    history = bookings_for_user(user)
+    tallies = {st: sum(1 for b in history if b.status == st) for st in ALL_STATUSES}
+
+    return render_template('user_profile.html',
+                           profile_user=user,
+                           history=history,
+                           tallies=tallies,
+                           comments=comments,
+                           can_comment=current_user.is_admin,
+                           faculties=all_faculties())
+
+
+@app.route('/user/<int:user_id>/comment', methods=['POST'])
+@admin_required
+def add_profile_comment(user_id):
+    """Admins of any faculty may leave a note on a borrower's profile."""
+    user = User.query.get_or_404(user_id)
+    body = (request.form.get('body') or '').strip()
+    if not body:
+        flash('Comment cannot be empty.', 'danger')
+        return redirect(url_for('user_profile', user_id=user.id))
+
+    # Record the faculty they are writing for, so the note still reads correctly
+    # if their roles change later. Super admins post under the faculty in view.
+    faculty = current_faculty()
+    if not current_user.is_admin_of(faculty):
+        mine = admin_faculties_for(current_user)
+        faculty = mine[0] if mine else None
+
+    db.session.add(ProfileComment(subject_id=user.id, author_id=current_user.id,
+                                  faculty_id=faculty.id if faculty else None,
+                                  body=body[:4000]))
+    db.session.commit()
+    flash('Comment added.', 'success')
+    return redirect(url_for('user_profile', user_id=user.id))
+
+
+@app.route('/user/<int:user_id>/reply/<int:comment_id>', methods=['POST'])
+@login_required
+def reply_profile_comment(user_id, comment_id):
+    """Reply to a note. The borrower answers for themselves; admins may follow up."""
+    user = User.query.get_or_404(user_id)
+    if not can_view_profile(user):
+        abort(403)
+
+    parent = ProfileComment.query.get_or_404(comment_id)
+    if parent.subject_id != user.id or parent.parent_id is not None:
+        abort(404)   # only reply to a top-level note on this profile
+
+    body = (request.form.get('body') or '').strip()
+    if not body:
+        flash('Reply cannot be empty.', 'danger')
+        return redirect(url_for('user_profile', user_id=user.id))
+
+    faculty = current_faculty() if current_user.is_admin else None
+    if faculty and not current_user.is_admin_of(faculty):
+        faculty = None
+
+    db.session.add(ProfileComment(subject_id=user.id, author_id=current_user.id,
+                                  faculty_id=faculty.id if faculty else None,
+                                  body=body[:4000], parent_id=parent.id))
+    db.session.commit()
+    flash('Reply posted.', 'success')
+    return redirect(url_for('user_profile', user_id=user.id))
+
+
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
@@ -2444,6 +2632,7 @@ if __name__ == '__main__':
     create_default_faculties()
     backfill_faculty_assignments()
     migrate_admin_roles_to_faculties()
+    backfill_booking_users()
     create_admin_user()
     create_default_locations()
     create_default_programmes()

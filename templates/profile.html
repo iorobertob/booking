@@ -46,7 +46,12 @@
 
 <hr class="my-4">
 
-<h4>My Bookings</h4>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <h4 class="mb-0">My Bookings</h4>
+    <a href="{{ url_for('user_profile', user_id=current_user.id) }}" class="btn btn-outline-primary btn-sm">
+        Full record &amp; notes
+    </a>
+</div>
 {% if bookings %}
 <div class="table-responsive">
 <table id="myBookingsTable" class="table table-striped table-hover">

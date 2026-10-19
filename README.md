@@ -541,6 +541,26 @@ sudo systemctl restart booking.service
 
 ## Changelog
 
+### v4.0 phases 3 & 4 — 2026-10-19 — Borrower profiles; All Bookings is active-only
+- **`/user/<id>` — borrower profile.** Shows that person's whole borrowing record **across every
+  faculty**, with per-status tallies and inline denial reasons. Visible to the person themselves and to
+  **any admin of any faculty** — deliberately not scoped, since the point is that a Theatre admin can
+  see how someone treated MISC's equipment.
+- **`ProfileComment`** — admins of any faculty leave notes (e.g. on the state of returned items); the
+  borrower can reply to each note, so a record is never one-sided. Authorship is shown as
+  "Name — KIMO admin" or "Name (borrower)", with the faculty recorded at write time so old notes still
+  read correctly after a role change. Top-level notes are admin-only; replies are open to the borrower
+  and to admins.
+- **`Booking.user_id`** links a booking to the account that made it. Previously only emails were stored,
+  so a person's history could only be found by string-matching addresses — unreliable once someone has
+  both an SSO and a local account. `backfill_booking_users()` links older rows by email, leaving
+  ambiguous ones NULL rather than guessing; `bookings_for_user()` still falls back to email so
+  pre-existing bookings appear.
+- Borrower names in All Bookings, History and the Users list link to the profile.
+- **All Bookings now lists active bookings only** (booked / approved / lent). Returned and denied are
+  closed records and appear in History, which the heading links to.
+- **DB migration required**: `9a030ac47afa`.
+
 ### v4.0 phase 2 — 2026-10-19 — Roles and scoped administration
 - **`FacultyAdmin`** (user × faculty) is the source of truth for who administers what; `User.is_admin`
   becomes a denormalisation meaning "administers at least one faculty, or is a super admin", written
