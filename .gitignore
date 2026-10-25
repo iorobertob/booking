@@ -14,3 +14,6 @@ mails_sent_log.txt.1
 test.py
 
 .env
+
+# Category card images uploaded by admins (user data, like vars/)
+static/uploads/

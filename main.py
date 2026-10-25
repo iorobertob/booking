@@ -8,6 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, timedelta
 import pymysql
@@ -433,6 +434,18 @@ class Booking(db.Model):
         self.status            = new_status
         self.status_changed_at = datetime.now()
 
+# Items may sit in several categories at once: a ZYLIA is both a Microphone and
+# Spatial Audio, an XR18 is both a Mixer and an Audio Interface. A join table
+# avoids forcing the coordinator to pick one arbitrary home per item.
+item_categories = db.Table(
+    'item_categories',
+    db.Column('item_id',     db.Integer, db.ForeignKey('item.id', ondelete='CASCADE'),
+              primary_key=True),
+    db.Column('category_id', db.Integer, db.ForeignKey('category.id', ondelete='CASCADE'),
+              primary_key=True),
+)
+
+
 # Define the Item model
 class Item(db.Model):
     id              = db.Column(db.Integer,     primary_key=True)
@@ -448,6 +461,8 @@ class Item(db.Model):
     # The faculty that owns this piece of equipment.
     faculty_id       = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True, index=True)
     faculty          = db.relationship('Faculty')
+    categories       = db.relationship('Category', secondary=item_categories,
+                                       back_populates='items', lazy='selectin')
     bookings        = db.relationship('Booking', order_by=Booking.id, back_populates='item')
 
 class BookingItem(db.Model):
@@ -470,6 +485,54 @@ class BookingItem(db.Model):
     def status(self):         return self.booking.status
     @property
     def note(self):           return self.booking.note
+
+
+class Category(db.Model):
+    """A browsable grouping of equipment, owned by one faculty.
+
+    Each faculty curates its own: MISC needs Microphones and Eurorack, KIMO
+    needs Cameras and Lenses. Deleting a category never deletes items — the
+    join rows go and the items become uncategorised.
+    """
+    id          = db.Column(db.Integer, primary_key=True)
+    faculty_id  = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=True, index=True)
+    name        = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(300), nullable=True)
+    # Path relative to static/, e.g. 'uploads/categories/misc-microphones.jpg'.
+    # Empty means the card falls back to a generated placeholder.
+    image_path  = db.Column(db.String(300), nullable=True)
+    sort_order  = db.Column(db.Integer, default=0, nullable=False)
+
+    faculty = db.relationship('Faculty')
+    items   = db.relationship('Item', secondary=item_categories,
+                              back_populates='categories', lazy='selectin')
+
+    __table_args__ = (
+        db.UniqueConstraint('faculty_id', 'name', name='uq_category_faculty_name'),
+    )
+
+    @property
+    def item_count(self):
+        return len(self.items)
+
+    @property
+    def color_hue(self):
+        """Stable hue for the placeholder card, kept near the theme colour.
+
+        The name still picks the value, so a category keeps the same tint
+        between page loads. But a full 0-359 spread turned the grid into a
+        rainbow, so it is confined to a narrow band around the site's own
+        indigo (the body gradient runs #0f0c29 -> #302b63, hue ~245). Cards
+        then read as shades of the theme rather than unrelated colours.
+        """
+        h = 0
+        for ch in (self.name or ''):
+            h = (ord(ch) + ((h << 5) - h)) & 0xFFFFFFFF
+        THEME_HUE, SPREAD = 245, 54          # 218-272: indigo through violet
+        return THEME_HUE - SPREAD // 2 + (h % SPREAD)
+
+    def __repr__(self):
+        return f"<Category {self.name}>"
 
 
 class Location(db.Model):
@@ -770,6 +833,48 @@ def seed_admin_notification_contacts():
         db.session.commit()
 
 
+# Starting categories for MISC, as proposed by the equipment coordinator.
+# Items are assigned to them by hand afterwards — nothing is auto-filed, since
+# guessing from product names would mis-file enough to be worse than useless.
+# Other faculties start empty and create their own.
+# Two merges against the coordinator's twelve, agreed with the user:
+#   Audio Interfaces + Mixers & Audio Processing -> the Behringer XR18 is sold as
+#     both a mixer and an 18-in interface, so the split forced arbitrary calls.
+#   Computers & Accessories + Cables, Stands & Accessories -> two "accessories"
+#     buckets invites coin-flips about where a USB cable belongs.
+# Items may sit in several categories, so the remaining overlaps (a wireless
+# headset is both a Microphone and a Wireless System) need no decision at all.
+DEFAULT_CATEGORIES_MISC = [
+    ("Microphones",                          "Studio and live microphones of all types"),
+    ("Field Recording",                      "Portable recorders for location work"),
+    ("Spatial & Experimental Audio",         "Ambisonic, binaural and contact microphones"),
+    ("Interfaces, Mixers & Processing",      "Audio interfaces, mixing desks, DI boxes and outboard"),
+    ("Synthesizers & Electronic Instruments","Modular, semi-modular and desktop synthesizers"),
+    ("MIDI Controllers",                     "Keyboards, pad and fader controllers, MIDI utilities"),
+    ("Speakers & Monitoring",                "PA speakers, studio monitors and headphones"),
+    ("Wireless Audio Systems",               "Wireless microphone and in-ear systems"),
+    ("Video & Multimedia",                   "Cameras, camcorders and video mixers"),
+    ("Computers, Cables & Accessories",      "Computers, peripherals, cables, stands, racks and power"),
+]
+
+
+def create_default_categories():
+    """Seed the default faculty's categories. Existing ones are left alone."""
+    with app.app_context():
+        fac = default_faculty()
+        if not fac:
+            logger.warning("No faculties seeded — skipping default categories.")
+            return
+        added = 0
+        for order, (name, description) in enumerate(DEFAULT_CATEGORIES_MISC, start=1):
+            if not Category.query.filter_by(name=name, faculty_id=fac.id).first():
+                db.session.add(Category(name=name, description=description,
+                                        faculty_id=fac.id, sort_order=order))
+                added += 1
+        db.session.commit()
+        print(f"  {added} categor{'y' if added == 1 else 'ies'} seeded for '{fac.code}'.")
+
+
 def create_default_programmes():
     """Pre-populate Programme table with default study programmes."""
     with app.app_context():
@@ -846,7 +951,30 @@ def policy():
 def home():
 
     faculty = current_faculty()
+    categories = categories_for_faculty(faculty)
+
+    # ?category=<id> narrows the list to one card's contents; ?category=none
+    # shows what has not been filed yet (admins only — see below).
+    selected = request.args.get('category')
+    selected_category = None
     items = items_for_faculty(faculty)
+
+    if selected == 'none':
+        items = [i for i in items if not i.categories]
+    elif selected and selected.isdigit():
+        selected_category = Category.query.get(int(selected))
+        if selected_category and selected_category.faculty_id == (faculty.id if faculty else None):
+            items = [i for i in items if selected_category in i.categories]
+        else:
+            selected_category = None
+
+    # Everything starts uncategorised, so the backlog card is shown to admins
+    # who can act on it, not to students browsing for gear.
+    uncategorised = [i for i in items_for_faculty(faculty) if not i.categories]
+    show_uncategorised = bool(
+        uncategorised and current_user.is_authenticated and current_user.is_admin_of(faculty)
+    )
+
     availability = check_all_items_availability(items)
 
     bookings = []
@@ -874,7 +1002,12 @@ def home():
 
     return render_template('home.html', items=items, availability=availability,
                            bookings=bookings, borrower_info=borrower_info,
-                           faculties=all_faculties(), faculty=faculty)
+                           faculties=all_faculties(), faculty=faculty,
+                           categories=categories,
+                           selected_category=selected_category,
+                           selected=selected,
+                           uncategorised_count=len(uncategorised),
+                           show_uncategorised=show_uncategorised)
 
 """
 Set of auxiliary functions for MS Office Login
@@ -1739,6 +1872,58 @@ def return_item(booking_id):
     return redirect(request.referrer or url_for('home'))
 
 
+# ── Category image uploads ────────────────────────────────────────────────────
+CATEGORY_IMAGE_DIR = os.path.join('static', 'uploads', 'categories')
+ALLOWED_IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+MAX_IMAGE_BYTES    = 4 * 1024 * 1024   # 4 MB
+
+
+def _save_category_image(file_storage, category):
+    """Store an uploaded card image and return its path relative to static/.
+
+    Returns None when nothing usable was uploaded. The extension is checked
+    against an allowlist rather than trusting the browser's content type, and
+    the stored name is derived from the category id so one category can never
+    overwrite another's image.
+    """
+    if not file_storage or not file_storage.filename:
+        return None
+
+    ext = os.path.splitext(file_storage.filename)[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTS:
+        flash(f'Unsupported image type "{ext}". Use JPG, PNG, WEBP or GIF.', 'danger')
+        return None
+
+    # Size is checked by reading the stream, since Content-Length can lie.
+    file_storage.stream.seek(0, os.SEEK_END)
+    size = file_storage.stream.tell()
+    file_storage.stream.seek(0)
+    if size > MAX_IMAGE_BYTES:
+        flash(f'Image is too large ({size // 1024} KB). The limit is '
+              f'{MAX_IMAGE_BYTES // 1024 // 1024} MB.', 'danger')
+        return None
+
+    os.makedirs(CATEGORY_IMAGE_DIR, exist_ok=True)
+    # Cache-buster in the name: browsers hold on to /static aggressively
+    # (nginx serves it with `expires max`), so a replaced image must get a new URL.
+    filename = f"category-{category.id}-{int(time.time())}{ext}"
+    file_storage.save(os.path.join(CATEGORY_IMAGE_DIR, secure_filename(filename)))
+    return f"uploads/categories/{secure_filename(filename)}"
+
+
+def _delete_category_image(category):
+    """Remove a category's image file from disk, ignoring an already-missing one."""
+    if not category.image_path:
+        return
+    path = os.path.join('static', category.image_path)
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Could not delete category image %s: %s", path, exc)
+
+
 def _safe_next(default_endpoint='home', **default_kwargs):
     """Where to go after a form submits, from `next`, falling back to a default.
 
@@ -1753,6 +1938,19 @@ def _safe_next(default_endpoint='home', **default_kwargs):
             return candidate
         logger.warning("Ignoring off-site next URL: %r", candidate)
     return url_for(default_endpoint, **default_kwargs)
+
+
+def _categories_from_form(form, faculty):
+    """Categories ticked on an item form, restricted to `faculty`.
+
+    Only ever returns categories belonging to the item's own faculty, so a
+    crafted form cannot file MISC equipment under a KIMO category.
+    """
+    wanted = {int(c) for c in form.getlist('category_ids') if c.isdigit()}
+    if not wanted:
+        return []
+    allowed = {c.id: c for c in categories_for_faculty(faculty)}
+    return [allowed[cid] for cid in wanted if cid in allowed]
 
 
 def _max_booking_days_from_form(form, fallback=DEFAULT_MAX_BOOKING_DAYS):
@@ -1778,6 +1976,7 @@ def add_item():
         new_item = Item(name=name, location=location, is_bookable=is_bookable,
                         max_booking_days=_max_booking_days_from_form(request.form),
                         faculty_id=faculty.id if faculty else None)
+        new_item.categories = _categories_from_form(request.form, faculty)
         db.session.add(new_item)
         db.session.commit()
         flash(f'Item {name} added successfully!', 'success')
@@ -1786,7 +1985,9 @@ def add_item():
 
     faculty = current_faculty()
     return render_template('add_item.html', locations=locations_for_faculty(faculty),
-                           faculty=faculty)
+                           faculty=faculty,
+                           categories=categories_for_faculty(faculty),
+                           selected_category_ids=set())
 
 
 @app.route('/edit_item/<int:item_id>', methods=['GET', 'POST'])
@@ -1800,6 +2001,8 @@ def edit_item(item_id):
         return render_template('edit_item.html', item=item,
                                locations=locations_for_faculty(item.faculty),
                                faculty=item.faculty,
+                               categories=categories_for_faculty(item.faculty),
+                               selected_category_ids={c.id for c in item.categories},
                                next_url=_safe_next('home'))
 
     if request.method == 'POST':
@@ -1812,6 +2015,7 @@ def edit_item(item_id):
         existing_item.is_bookable = 'is_bookable' in request.form
         existing_item.max_booking_days = _max_booking_days_from_form(
             request.form, fallback=existing_item.max_booking_days or DEFAULT_MAX_BOOKING_DAYS)
+        existing_item.categories = _categories_from_form(request.form, existing_item.faculty)
         db.session.commit()
         flash(f'Item {name} edited successfully!', 'success')
         next_url = _safe_next('home')
@@ -1965,6 +2169,125 @@ def export_items():
 
     filename = f'misc_items_{datetime.now().strftime("%Y%m%d")}.{extension}'
     return send_file(buffer, mimetype=mimetype, as_attachment=True, download_name=filename)
+
+
+# ── Category management ───────────────────────────────────────────────────────
+
+def categories_for_faculty(faculty):
+    return Category.query.filter(
+        faculty_filter(Category.faculty_id, faculty)
+    ).order_by(Category.sort_order, Category.name).all()
+
+
+@app.route('/admin/add_category', methods=['POST'])
+@admin_required
+def add_category():
+    faculty = current_faculty()
+    require_faculty_admin(faculty)
+
+    name = (request.form.get('name') or '').strip()
+    if not name:
+        flash('Category name cannot be empty.', 'danger')
+        return redirect(_safe_next('admin_dashboard', section='categories'))
+
+    fid = faculty.id if faculty else None
+    if Category.query.filter_by(name=name, faculty_id=fid).first():
+        flash(f'Category "{name}" already exists in this faculty.', 'warning')
+        return redirect(_safe_next('admin_dashboard', section='categories'))
+
+    category = Category(
+        name=name,
+        description=(request.form.get('description') or '').strip() or None,
+        faculty_id=fid,
+        sort_order=len(categories_for_faculty(faculty)) + 1,
+    )
+    db.session.add(category)
+    db.session.flush()          # need the id before naming the image file
+
+    image = _save_category_image(request.files.get('image'), category)
+    if image:
+        category.image_path = image
+
+    db.session.commit()
+    flash(f'Category "{name}" created.', 'success')
+    return redirect(_safe_next('admin_dashboard', section='categories'))
+
+
+@app.route('/admin/edit_category/<int:category_id>', methods=['POST'])
+@admin_required
+def edit_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    require_faculty_admin(category.faculty)
+
+    name = (request.form.get('name') or '').strip()
+    if not name:
+        flash('Category name cannot be empty.', 'danger')
+        return redirect(_safe_next('admin_dashboard', section='categories'))
+
+    clash = Category.query.filter(
+        Category.name == name,
+        Category.faculty_id == category.faculty_id,
+        Category.id != category.id,
+    ).first()
+    if clash:
+        flash(f'Another category in this faculty is already called "{name}".', 'warning')
+        return redirect(_safe_next('admin_dashboard', section='categories'))
+
+    category.name = name
+    category.description = (request.form.get('description') or '').strip() or None
+
+    if request.form.get('remove_image'):
+        _delete_category_image(category)
+        category.image_path = None
+    else:
+        image = _save_category_image(request.files.get('image'), category)
+        if image:
+            _delete_category_image(category)   # replace, don't orphan the old file
+            category.image_path = image
+
+    db.session.commit()
+    flash(f'Category "{name}" updated.', 'success')
+    return redirect(_safe_next('admin_dashboard', section='categories'))
+
+
+@app.route('/admin/delete_category/<int:category_id>', methods=['POST'])
+@admin_required
+def delete_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    require_faculty_admin(category.faculty)
+
+    name, count = category.name, category.item_count
+    _delete_category_image(category)
+    # The join rows go with it; the items themselves are untouched and simply
+    # become uncategorised.
+    db.session.delete(category)
+    db.session.commit()
+    flash(f'Category "{name}" deleted. {count} item(s) are now uncategorised.', 'success')
+    return redirect(_safe_next('admin_dashboard', section='categories'))
+
+
+@app.route('/admin/category/<int:category_id>/items', methods=['GET', 'POST'])
+@admin_required
+def category_items(category_id):
+    """Assign this faculty's items to one category."""
+    category = Category.query.get_or_404(category_id)
+    require_faculty_admin(category.faculty)
+
+    if request.method == 'POST':
+        chosen = {int(i) for i in request.form.getlist('item_ids') if i.isdigit()}
+        # Only ever touch items of this category's own faculty, so a crafted
+        # form cannot pull another faculty's equipment in.
+        allowed = {i.id: i for i in items_for_faculty(category.faculty)}
+        category.items = [allowed[i] for i in chosen if i in allowed]
+        db.session.commit()
+        flash(f'{len(category.items)} item(s) in "{category.name}".', 'success')
+        return redirect(url_for('category_items', category_id=category.id))
+
+    return render_template('category_items.html',
+                           category=category,
+                           faculty=category.faculty,
+                           items=items_for_faculty(category.faculty),
+                           selected_ids={i.id for i in category.items})
 
 
 @app.route('/locations')
@@ -2316,6 +2639,10 @@ def admin_dashboard():
         data['locations'] = locations_for_faculty(data['faculty'])
     elif section == 'programmes':
         data['programmes'] = Programme.query.order_by(Programme.name).all()
+    elif section == 'categories':
+        data['categories'] = categories_for_faculty(faculty)
+        data['uncategorised_count'] = sum(
+            1 for i in items_for_faculty(faculty) if not i.categories)
     elif section == 'items':
         fac = data['faculty']
         data['items'] = Item.query.filter(
@@ -2667,6 +2994,7 @@ if __name__ == '__main__':
 
     create_default_faculties()
     backfill_faculty_assignments()
+    create_default_categories()
     migrate_admin_roles_to_faculties()
     backfill_booking_users()
     create_admin_user()

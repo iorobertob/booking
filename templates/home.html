@@ -28,6 +28,46 @@
 </ul>
 {% endif %}
 
+{# ── Category cards ─────────────────────────────────────────────────────────
+   Browsable groupings for this faculty. Clicking one filters the table below;
+   clicking the active one clears the filter. The hue is derived from the name
+   so a card without an uploaded image still looks deliberate and is stable
+   across page loads. #}
+{% if categories or show_uncategorised %}
+<div class="category-grid">
+    {% for c in categories %}
+    <a class="category-card {% if not c.image_path %}category-card--placeholder{% endif %} {% if selected_category and selected_category.id == c.id %}is-active{% endif %}"
+       style="--cat-hue: {{ c.color_hue }};"
+       href="{% if selected_category and selected_category.id == c.id %}{{ url_for('home', faculty=faculty.code if faculty else None) }}{% else %}{{ url_for('home', faculty=faculty.code if faculty else None, category=c.id) }}{% endif %}"
+       title="{{ c.description or c.name }}">
+        <span class="category-card__media"
+              {% if c.image_path %}style="background-image:url('{{ url_for('static', filename=c.image_path) }}');"{% endif %}></span>
+        <h3 class="category-card__title h6">{{ c.name }}</h3>
+        <span class="category-card__count">{{ c.item_count }} item{{ '' if c.item_count == 1 else 's' }}</span>
+    </a>
+    {% endfor %}
+
+    {% if show_uncategorised %}
+    <a class="category-card category-card--placeholder category-card--todo {% if selected == 'none' %}is-active{% endif %}"
+       href="{% if selected == 'none' %}{{ url_for('home', faculty=faculty.code if faculty else None) }}{% else %}{{ url_for('home', faculty=faculty.code if faculty else None, category='none') }}{% endif %}"
+       title="Items not yet filed into a category — visible to admins only">
+        <span class="category-card__media"></span>
+        <span class="category-card__glyph">&#9888;</span>
+        <h3 class="category-card__title h6">Uncategorised</h3>
+        <span class="category-card__count">{{ uncategorised_count }} item{{ '' if uncategorised_count == 1 else 's' }} &middot; admins only</span>
+    </a>
+    {% endif %}
+</div>
+
+{% if selected_category or selected == 'none' %}
+<p class="mb-3">
+    <span class="text-muted">Showing</span>
+    <strong>{{ selected_category.name if selected_category else 'Uncategorised' }}</strong>
+    <a href="{{ url_for('home', faculty=faculty.code if faculty else None) }}" class="ms-2 small">Show all items</a>
+</p>
+{% endif %}
+{% endif %}
+
 <div class="mb-3 d-flex flex-column flex-md-row justify-content-center justify-content-md-end align-items-center gap-2 px-3">
     {% if current_user.is_authenticated and current_user.is_admin %}
     <a href="{{ url_for('add_item', faculty=faculty.code if faculty else None) }}" class="btn btn-primary booking" style="background-color: #34495e; border: none;">Add Item</a>

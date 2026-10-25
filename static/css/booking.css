@@ -403,3 +403,271 @@ td.clickable-cell:hover {
 [data-bs-theme="dark"] td.clickable-cell:hover {
     background-color: rgba(255, 255, 255, 0.08);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CATEGORY CARDS — liquid glass
+   Browsable groupings on each faculty's home page. The glass effect layers a
+   translucent surface over the page gradient; backdrop-filter does the work,
+   and every rule degrades to a plain tinted card where it is unsupported.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.category-grid {
+    display: grid;
+    /* auto-fit + minmax is the whole responsive story: 4 across on a desktop,
+       2 on a tablet, 1 on a phone, with no media queries to keep in sync. */
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+}
+
+.category-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 150px;
+    padding: 1rem;
+    border-radius: 18px;
+    overflow: hidden;
+    text-decoration: none;
+    isolation: isolate;                 /* keep ::before behind the content */
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    /* Barely-there tint: the glass should transmit the page gradient behind it,
+       not cover it. The blur below is what actually makes it read as glass. */
+    background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.10) 0%,
+                rgba(255, 255, 255, 0.03) 55%,
+                rgba(255, 255, 255, 0.07) 100%);
+    backdrop-filter: blur(22px) saturate(180%) brightness(1.06);
+    -webkit-backdrop-filter: blur(22px) saturate(180%) brightness(1.06);
+    /* Depth below; a lit rim along the top edge and a dim one along the
+       bottom — the pair is what sells thickness rather than a flat pane. */
+    box-shadow: 0 10px 30px rgba(5, 5, 20, 0.38),
+                0 2px 6px rgba(5, 5, 20, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.55),
+                inset 0 -1px 0 rgba(255, 255, 255, 0.10),
+                inset 0 0 38px rgba(255, 255, 255, 0.05);
+    transition: transform 0.22s ease, box-shadow 0.22s ease,
+                border-color 0.22s ease, background 0.22s ease;
+}
+
+/* The uploaded image sits beneath the glass rather than inside an <img>, so the
+   blur and the text overlay apply to it without extra markup. */
+.category-card__media {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background-size: cover;
+    background-position: center;
+    transform: scale(1.02);             /* hide edge seams when it scales on hover */
+    transition: transform 0.4s ease;
+}
+
+/* Scrim: without it, pale photographs make the title unreadable. */
+.category-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(to top,
+                rgba(10, 10, 30, 0.78) 0%,
+                rgba(10, 10, 30, 0.35) 45%,
+                rgba(10, 10, 30, 0.10) 100%);
+}
+
+.category-card:hover,
+.category-card:focus-visible {
+    transform: translateY(-4px);
+    border-color: rgba(255, 255, 255, 0.34);
+    background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.16) 0%,
+                rgba(255, 255, 255, 0.06) 55%,
+                rgba(255, 255, 255, 0.11) 100%);
+    box-shadow: 0 18px 42px rgba(5, 5, 20, 0.46),
+                0 3px 8px rgba(5, 5, 20, 0.26),
+                inset 0 1px 0 rgba(255, 255, 255, 0.72),
+                inset 0 -1px 0 rgba(255, 255, 255, 0.14),
+                inset 0 0 46px rgba(255, 255, 255, 0.08);
+}
+.category-card:hover .category-card__media { transform: scale(1.08); }
+
+.category-card.is-active {
+    border-color: rgba(147, 197, 253, 0.9);
+    box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.45),
+                0 12px 32px rgba(0, 0, 0, 0.26);
+}
+
+.category-card__title {
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.25;
+    margin: 0;
+    /* Two shadows: a tight one for edge definition and a wide soft one that
+       acts as a local scrim, so the title holds up over a white product shot. */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75),
+                 0 2px 14px rgba(0, 0, 0, 0.55);
+}
+
+.category-card__count {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Placeholder when no image has been uploaded: a tinted gradient derived from
+   the category name, so each card still looks deliberate rather than empty. */
+/* No uploaded image: a translucent wash rather than a painted gradient, so the
+   page still shows through and the card matches the ones that do have images.
+   --cat-hue is confined to a band around the theme hue (see Category.color_hue). */
+.category-card--placeholder .category-card__media {
+    background-image:
+        radial-gradient(125% 95% at 16% -8%,
+            hsl(var(--cat-hue, 245) 48% 68% / 0.34) 0%,
+            hsl(var(--cat-hue, 245) 42% 50% / 0.14) 46%,
+            transparent 74%),
+        linear-gradient(152deg,
+            hsl(var(--cat-hue, 245) 36% 34% / 0.50) 0%,
+            hsl(calc(var(--cat-hue, 245) + 14) 40% 20% / 0.38) 100%);
+}
+/* With an image, the scrim can be gentler — the picture carries the card. */
+.category-card--placeholder::before {
+    background: linear-gradient(to top,
+                rgba(10, 10, 30, 0.55) 0%,
+                rgba(10, 10, 30, 0.18) 55%,
+                rgba(10, 10, 30, 0.04) 100%);
+}
+
+/* Light mode: the page behind is pale, so near-white glass loses its edge.
+   Tint it a touch deeper and firm up the rim so the card still reads as an
+   object sitting on the background rather than a faint smudge. */
+:root:not([data-bs-theme="dark"]) .category-card {
+    border-color: rgba(255, 255, 255, 0.70);
+    background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.55) 0%,
+                rgba(255, 255, 255, 0.28) 55%,
+                rgba(255, 255, 255, 0.42) 100%);
+    box-shadow: 0 10px 26px rgba(40, 45, 90, 0.20),
+                0 2px 6px rgba(40, 45, 90, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.95),
+                inset 0 -1px 0 rgba(255, 255, 255, 0.45);
+}
+:root:not([data-bs-theme="dark"]) .category-card--placeholder .category-card__media {
+    background-image:
+        radial-gradient(125% 95% at 16% -8%,
+            hsl(var(--cat-hue, 245) 55% 78% / 0.55) 0%,
+            hsl(var(--cat-hue, 245) 48% 62% / 0.28) 46%,
+            transparent 74%),
+        linear-gradient(152deg,
+            hsl(var(--cat-hue, 245) 42% 58% / 0.55) 0%,
+            hsl(calc(var(--cat-hue, 245) + 14) 44% 42% / 0.45) 100%);
+}
+
+/* With an uploaded image the card should read as glass OVER a photo, not a
+   bare photo. The picture is gently frosted and pushed back, and the scrim is
+   stronger than the placeholder's because a photo can be bright anywhere —
+   the title has to stay legible over a white product shot as well as a dark one. */
+.category-card:not(.category-card--placeholder) .category-card__media {
+    filter: saturate(1.06) contrast(0.94) brightness(0.92) blur(0.4px);
+}
+.category-card:not(.category-card--placeholder)::before {
+    background:
+        linear-gradient(to top,
+            rgba(8, 8, 24, 0.88) 0%,
+            rgba(8, 8, 24, 0.52) 38%,
+            rgba(8, 8, 24, 0.22) 70%,
+            rgba(8, 8, 24, 0.10) 100%),
+        /* a wash of the theme hue so photos still belong to the set */
+        linear-gradient(152deg,
+            hsl(var(--cat-hue, 245) 40% 40% / 0.28) 0%,
+            hsl(var(--cat-hue, 245) 35% 22% / 0.18) 100%);
+}
+
+/* Light mode puts white titles over a pale wash, which is too close in tone.
+   Deepen the foot of the scrim so the text band stays dark enough to read,
+   without losing the transparency higher up the card. */
+:root:not([data-bs-theme="dark"]) .category-card--placeholder::before {
+    background: linear-gradient(to top,
+                rgba(24, 26, 62, 0.72) 0%,
+                rgba(24, 26, 62, 0.40) 42%,
+                rgba(24, 26, 62, 0.10) 78%,
+                rgba(24, 26, 62, 0.02) 100%);
+}
+
+/* ── Specular reflection ───────────────────────────────────────────────────
+   What actually makes it look like glass: a soft bloom where the light hits
+   the top-left corner, and a diagonal streak across the face. Sits above the
+   image and the scrim but below the text (negative z-index, after ::before in
+   DOM order). It drifts on hover, as a highlight does when you tilt glass. */
+.category-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        linear-gradient(125deg,
+            rgba(255, 255, 255, 0) 36%,
+            rgba(255, 255, 255, 0.07) 45%,
+            rgba(255, 255, 255, 0.20) 50%,
+            rgba(255, 255, 255, 0.05) 56%,
+            rgba(255, 255, 255, 0) 65%),
+        radial-gradient(90% 62% at 10% -12%,
+            rgba(255, 255, 255, 0.34) 0%,
+            rgba(255, 255, 255, 0.08) 44%,
+            transparent 72%);
+    /* The streak is drawn on an oversized layer and offset per card, so the
+       highlight does not land in the same place on every tile — a grid of
+       identical reflections reads as a repeated texture, not as glass.
+       --cat-hue (218-272) doubles as the per-card seed, no extra markup. */
+    background-size: 260% 260%, 100% 100%;
+    background-position: calc((var(--cat-hue, 245) - 218) * 1.9%) 0%, 0% 0%;
+    mix-blend-mode: screen;             /* contained by `isolation: isolate` */
+    opacity: 0.9;
+    transition: transform 0.5s ease, opacity 0.3s ease;
+}
+.category-card:hover::after,
+.category-card:focus-visible::after {
+    transform: translate3d(7%, -5%, 0) scale(1.06);
+    opacity: 1;
+}
+
+.category-card__glyph {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.85rem;
+    z-index: -1;
+    font-size: 2.4rem;
+    opacity: 0.28;
+    filter: blur(0.2px);
+}
+
+/* "Uncategorised" is a backlog marker, not a real grouping — dashed and muted
+   so it reads as a to-do rather than part of the catalogue. */
+.category-card--todo {
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+.category-card--todo .category-card__media {
+    background-image: linear-gradient(135deg,
+                      rgba(120, 120, 140, 0.55) 0%,
+                      rgba(60, 60, 80, 0.55) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .category-card,
+    .category-card__media { transition: none; }
+    .category-card:hover { transform: none; }
+    .category-card:hover .category-card__media { transform: scale(1.02); }
+}
+
+/* Light mode: the same glass over a pale background needs a darker border and
+   a lighter fill, or the cards vanish into the page. */
+:root:not([data-bs-theme="dark"]) .category-card {
+    border-color: rgba(31, 41, 55, 0.18);
+    background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.72) 0%,
+                rgba(255, 255, 255, 0.42) 100%);
+    box-shadow: 0 6px 20px rgba(31, 41, 55, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}

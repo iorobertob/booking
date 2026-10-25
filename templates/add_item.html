@@ -36,6 +36,31 @@
                 <div class="form-text">Counted inclusively — borrow Mon to return the following Mon is 8 days.</div>
             </div>
 
+
+            {# An item may sit in several categories, so these are checkboxes
+               rather than a dropdown — the ZYLIA is both a Microphone and
+               Spatial Audio, and forcing one would lose that. #}
+            <div class="mb-3">
+                <label class="form-label">Categories</label>
+                {% if categories %}
+                <div class="d-flex flex-wrap gap-3 p-2 rounded" style="background: rgba(127,127,127,0.08);">
+                    {% for c in categories %}
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="category_ids"
+                               value="{{ c.id }}" id="cat_{{ c.id }}"
+                               {% if c.id in selected_category_ids %}checked{% endif %}>
+                        <label class="form-check-label" for="cat_{{ c.id }}">{{ c.name }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="form-text">Leave all unticked to keep the item uncategorised.</div>
+                {% else %}
+                <div class="form-text">
+                    No categories yet for this faculty —
+                    <a href="{{ url_for('admin_dashboard', section='categories', faculty=faculty.code if faculty else None) }}">create one first</a>.
+                </div>
+                {% endif %}
+            </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" id="is_bookable" name="is_bookable" checked class="form-check-input">
                 <label for="is_bookable" class="form-check-label">Available for booking</label>

@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+    <h4 class="mb-0">{{ category.name }}</h4>
+    <a href="{{ url_for('admin_dashboard', section='categories', faculty=faculty.code if faculty else None) }}"
+       class="btn btn-outline-secondary btn-sm">&larr; Back to categories</a>
+</div>
+<p class="text-muted small">
+    {% if faculty %}{{ faculty.short_name }} &middot; {% endif %}
+    Tick the items that belong in this category. An item may be in several categories.
+</p>
+
+<form method="post">
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAll(true)">Select all shown</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAll(false)">Clear shown</button>
+        <input type="search" id="itemFilter" class="form-control form-control-sm ms-auto" style="max-width:260px;"
+               placeholder="Filter by name or location…" oninput="filterItems(this.value)">
+    </div>
+
+    <div class="table-responsive">
+    <table class="table table-striped table-hover align-middle" id="assignTable">
+        <thead>
+            <tr>
+                <th style="width:1%;"></th>
+                <th>Item</th>
+                <th>Location</th>
+                <th>Also in</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td><input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input item-tick"
+                           {% if item.id in selected_ids %}checked{% endif %}></td>
+                <td>{{ item.name }}{% if not item.is_bookable %} <small class="text-muted">(not bookable)</small>{% endif %}</td>
+                <td>{{ item.location or '' }}</td>
+                <td>
+                    {% for c in item.categories if c.id != category.id %}
+                    <span class="badge bg-secondary">{{ c.name }}</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>
+
+<script>
+// Plain DOM filtering rather than DataTables: the checkbox state must survive
+// filtering, and DataTables removes non-visible rows from the DOM — which would
+// drop those checkboxes from the submitted form.
+function filterItems(q) {
+    const needle = (q || '').toLowerCase();
+    document.querySelectorAll('#assignTable tbody tr').forEach(function(tr) {
+        const hay = (tr.children[1].textContent + ' ' + tr.children[2].textContent).toLowerCase();
+        tr.style.display = hay.includes(needle) ? '' : 'none';
+    });
+}
+function toggleAll(state) {
+    document.querySelectorAll('#assignTable tbody tr').forEach(function(tr) {
+        if (tr.style.display !== 'none') tr.querySelector('.item-tick').checked = state;
+    });
+}
+</script>
+
+{% endblock %}

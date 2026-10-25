@@ -196,6 +196,16 @@ if [[ "$DRY_RUN" != "1" ]]; then
     success "Faculty backfill complete."
 fi
 
+# ── Seed default categories ────────────────────────────────────────────────
+echo ""
+info "Seeding default equipment categories if not already present..."
+
+run_py "from main import create_default_categories; create_default_categories()"
+
+if [[ "$DRY_RUN" != "1" ]]; then
+    success "Categories seeded."
+fi
+
 # ── Seed default locations ─────────────────────────────────────────────────
 echo ""
 info "Seeding default locations (A, B, C) if not already present..."
