@@ -567,6 +567,11 @@ class User(UserMixin, db.Model):
     # or revoke faculty admin rights.
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False,
                                server_default='0')
+    # When the account was created, and when it was last signed in to. Both are
+    # NULL for accounts that predate these columns — there is nothing reliable
+    # to infer them from, and guessing from booking dates would be fiction.
+    created_at     = db.Column(db.DateTime, default=datetime.now, nullable=True)
+    last_login_at  = db.Column(db.DateTime, nullable=True)
 
     # FacultyAdmin is the source of truth for WHICH faculties a user administers.
     # `is_admin` is a denormalisation meaning "administers at least one faculty,
@@ -634,6 +639,20 @@ class FacultyAdmin(db.Model):
     __table_args__ = (
         db.UniqueConstraint('user_id', 'faculty_id', name='uq_faculty_admin_user_faculty'),
     )
+
+
+def record_login(user):
+    """Stamp a successful sign-in. Called from both login paths.
+
+    Committed separately from whatever else the request does, so a failure
+    here can never block someone from logging in.
+    """
+    try:
+        user.last_login_at = datetime.now()
+        db.session.commit()
+    except Exception as exc:                     # pragma: no cover - defensive
+        db.session.rollback()
+        logger.warning("Could not record login for %s: %s", user.username, exc)
 
 
 def refresh_admin_flag(user):
@@ -1126,6 +1145,7 @@ def authorized():
 
         # Log the user in
         login_user(user)
+        record_login(user)
 
         if is_new_user:
             flash('Welcome! Please complete your profile.', 'info')
@@ -1145,6 +1165,7 @@ def login():
 
         if user and check_password_hash(user.password, password):
             response = login_user(user, remember=True)
+            record_login(user)
 
             flash('Login successful', 'success')
             return redirect(url_for('home'))

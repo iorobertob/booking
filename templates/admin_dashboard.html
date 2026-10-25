@@ -299,6 +299,8 @@
                     <th>Username</th>
                     <th>Name</th>
                     <th>Course</th>
+                    <th style="white-space:nowrap; width:1%;">Signed&nbsp;up</th>
+                    <th style="white-space:nowrap; width:1%;">Last&nbsp;login</th>
                     <th style="white-space:nowrap; width:1%;">Super</th>
                     <th style="white-space:nowrap;">Faculty&nbsp;admin</th>
                     <th style="white-space:nowrap; width:1%;">Admin&nbsp;emails</th>
@@ -312,6 +314,15 @@
                     <td><a href="{{ url_for('user_profile', user_id=u.id) }}">{{ u.username }}</a></td>
                     <td>{{ (u.first_name or '') + ' ' + (u.last_name or '') }}</td>
                     <td>{{ u.course or '' }}</td>
+                    {# data-order keeps DataTables sorting chronologically rather
+                       than alphabetically on the formatted string. #}
+                    <td style="white-space:nowrap;" data-order="{{ u.created_at.isoformat() if u.created_at else '' }}">
+                        {{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '—' }}
+                    </td>
+                    <td style="white-space:nowrap;" data-order="{{ u.last_login_at.isoformat() if u.last_login_at else '' }}">
+                        {% if u.last_login_at %}{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') }}
+                        {% else %}<span class="text-muted">never</span>{% endif %}
+                    </td>
                     {# Super admin: administers every faculty and is the only role
                        that can grant or revoke rights. Only a super admin sees controls. #}
                     <td style="white-space:nowrap; width:1%;">

@@ -144,6 +144,8 @@ Registered user (local account or MS SSO auto-created).
 | `last_name` | String(50) | |
 | `phone` | String(30) | |
 | `course` | String(200) | Study programme (datalist from `Programme`) |
+| `created_at` | DateTime | When the account was created. NULL for accounts predating v4.2 |
+| `last_login_at` | DateTime | Last successful sign-in, set by `record_login()` from both the local and SSO paths. NULL until they sign in |
 | `receives_admin_emails` | Boolean | Default `True`. Whether this admin is copied on booking notifications. Toggled per admin in the dashboard Users section; ignored for non-admins |
 
 ---
@@ -506,7 +508,7 @@ sudo systemctl restart booking.service
 
 ## TODO
 * When an item is edited from the admin dashboard and saved, return to the admin's item list — **Done (v4.0.2)**
-* Add fields to user model to register sign up date and last login, booked items — *partly*: booked items are on the profile (**v4.0 phase 3**, `Booking.user_id`); sign-up date and last login are still missing
+* Add fields to user model to register sign up date and last login, booked items — **Done**: booked items on the profile (**v4.0 phase 3**), sign-up date and last login (**v4.2**)
 * Update to Booked / Lent / Returned statuses — **Done (v3.3)**: booked / approved / lent / returned / denied
 * Add max lending time — **Done (v3.4)**: `Item.max_booking_days`, default 8
 * Group by categories like a music shop (microphones, instruments, utilities) — **Done (v4.1)**: per-faculty categories, many-to-many with items, cards on each faculty home page

@@ -5,6 +5,17 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.2 — 2026-10-25 — User sign-up date and last login
+- **`User.created_at`** and **`User.last_login_at`**. Both login paths — local and Microsoft SSO —
+  stamp the latter through a single `record_login()` helper, which commits separately so a failure
+  recording the timestamp can never block someone signing in. A *failed* login does not stamp it.
+- Shown as sortable **Signed up** and **Last login** columns in the dashboard Users section (sorted
+  chronologically via `data-order`, not alphabetically on the formatted string), and in the header of
+  a borrower's profile.
+- Existing accounts show "—" and "never" until they next sign in: there is nothing reliable to infer
+  these from, and backfilling from booking dates would be invented data.
+- **DB migration required**: `d4640af2391b`.
+
 ## v4.1 — 2026-10-25 — Item categories
 - **Per-faculty categories** (`Category`), **many-to-many with items** (`item_categories`). An item can
   sit in several at once — the ZYLIA is both a Microphone and Spatial Audio — so the overlaps in the

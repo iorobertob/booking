@@ -11,6 +11,14 @@
             {% if profile_user.course %} · {{ profile_user.course }}{% endif %}
             {% if profile_user.phone %} · {{ profile_user.phone }}{% endif %}
         </div>
+        <div class="text-muted small mt-1">
+            Signed up
+            {% if profile_user.created_at %}{{ profile_user.created_at.strftime('%Y-%m-%d') }}
+            {% else %}<span title="Account predates this being recorded">unknown</span>{% endif %}
+            · last login
+            {% if profile_user.last_login_at %}{{ profile_user.last_login_at.strftime('%Y-%m-%d %H:%M') }}
+            {% else %}never{% endif %}
+        </div>
     </div>
     {% if profile_user.id == current_user.id %}
     <a href="{{ url_for('profile') }}" class="btn btn-outline-primary btn-sm">Edit my details</a>
