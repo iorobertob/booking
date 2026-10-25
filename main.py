@@ -925,6 +925,16 @@ def admin_faculties_for(user):
     return sorted(user.admin_faculties, key=lambda f: (f.sort_order, f.id))
 
 
+@app.context_processor
+def inject_template_globals():
+    """Values every template can use without each route passing them.
+
+    macros.html's footer reads `current_year`, which nothing ever supplied —
+    it fell back to a hardcoded 2025 and would have stayed there indefinitely.
+    """
+    return {'current_year': datetime.now().year}
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -2036,11 +2046,19 @@ def delete_item(item_id):
 
 
 # ── Item export (CSV / XLSX / PDF) ────────────────────────────────────────
-ITEM_EXPORT_HEADERS = ['ID', 'Name', 'Location', 'Bookable', 'Max Booking Days', 'Manual Link', 'Photo Path']
+ITEM_EXPORT_HEADERS = ['ID', 'Name', 'Location', 'Bookable', 'Max Booking Days', 'Categories', 'Manual Link', 'Photo Path']
 
 
-def _item_export_rows():
-    """All items, ordered by name, as a list of row lists matching ITEM_EXPORT_HEADERS."""
+def _item_export_rows(faculty=None):
+    """One faculty's items, ordered by name, matching ITEM_EXPORT_HEADERS.
+
+    Scoped deliberately: unfiltered, a KIMO admin's export contained MISC's
+    whole inventory. Passing None exports everything, which only a super admin
+    viewing no particular faculty can reach.
+    """
+    query = Item.query
+    if faculty is not None:
+        query = query.filter(faculty_filter(Item.faculty_id, faculty))
     return [
         [
             item.id,
@@ -2048,10 +2066,11 @@ def _item_export_rows():
             (item.location or '').strip(),
             'Yes' if item.is_bookable else 'No',
             item.max_booking_days or DEFAULT_MAX_BOOKING_DAYS,
+            ', '.join(sorted(c.name for c in item.categories)),
             item.manual_link or '',
             item.photo_path or '',
         ]
-        for item in Item.query.order_by(Item.name).all()
+        for item in query.order_by(Item.name).all()
     ]
 
 
@@ -2115,7 +2134,7 @@ def _items_pdf(headers, rows):
                             title='MISC Booking — Items')
 
     table = Table(data, repeatRows=1,
-                  colWidths=[12 * mm, 56 * mm, 28 * mm, 18 * mm, 20 * mm, 66 * mm, 56 * mm])
+                  colWidths=[11 * mm, 50 * mm, 25 * mm, 16 * mm, 17 * mm, 52 * mm, 44 * mm, 40 * mm])
     table.setStyle(TableStyle([
         ('BACKGROUND',   (0, 0), (-1, 0), colors.HexColor('#343a40')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f2f2f2')]),
@@ -2158,7 +2177,9 @@ def export_items():
         flash(f'Unsupported export format: {fmt}', 'danger')
         return redirect(url_for('admin_dashboard', section='items'))
 
-    rows = _item_export_rows()
+    faculty = current_faculty()
+    require_faculty_admin(faculty)
+    rows = _item_export_rows(faculty)
     try:
         buffer, mimetype, extension = builder(ITEM_EXPORT_HEADERS, rows)
     except ImportError:
@@ -2321,8 +2342,12 @@ def add_location():
 @admin_required
 def delete_location(location_id):
     loc = Location.query.get_or_404(location_id)
+    require_faculty_admin(loc.faculty)
     next_url = _safe_next('locations')
-    if Item.query.filter_by(location=loc.name).first():
+    # Scoped to this faculty: location names are unique per faculty now, so a
+    # MISC item in "Studio A" must not block Theatre deleting their own.
+    if Item.query.filter(Item.location == loc.name,
+                         faculty_filter(Item.faculty_id, loc.faculty)).first():
         flash(f'Cannot delete "{loc.name}": items reference it.', 'danger')
     else:
         db.session.delete(loc)
@@ -2335,12 +2360,15 @@ def delete_location(location_id):
 @admin_required
 def edit_location(location_id):
     loc = Location.query.get_or_404(location_id)
+    require_faculty_admin(loc.faculty)
     name = request.form.get('name', '').strip()
     next_url = _safe_next('locations')
     if not name:
         flash('Location name cannot be empty.', 'danger')
-    elif Location.query.filter(Location.name == name, Location.id != location_id).first():
-        flash(f'Location "{name}" already exists.', 'warning')
+    elif Location.query.filter(Location.name == name,
+                               Location.id != location_id,
+                               faculty_filter(Location.faculty_id, loc.faculty)).first():
+        flash(f'Location "{name}" already exists in this faculty.', 'warning')
     else:
         loc.name = name
         db.session.commit()
@@ -2351,8 +2379,21 @@ def edit_location(location_id):
 @app.route('/bookings_admin')
 @admin_required
 def bookings_admin():
-    bookings = Booking.query.order_by(Booking.id.desc()).all()
-    return render_template('bookings_admin.html', bookings=bookings)
+    # Was unscoped: any admin saw every faculty's bookings, borrower names and
+    # addresses included. Mirrors the dashboard — one faculty, and only one the
+    # current admin actually administers.
+    faculty = current_faculty()
+    if faculty is None or not current_user.is_admin_of(faculty):
+        mine = admin_faculties_for(current_user)
+        if not mine:
+            abort(403)
+        faculty = mine[0]
+        session['faculty_code'] = faculty.code
+    require_faculty_admin(faculty)
+    bookings = Booking.query.filter(
+        faculty_filter(Booking.faculty_id, faculty)
+    ).order_by(Booking.id.desc()).all()
+    return render_template('bookings_admin.html', bookings=bookings, faculty=faculty)
 
 
 @app.route('/booking_detail_json/<int:booking_id>')

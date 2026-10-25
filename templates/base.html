@@ -87,7 +87,9 @@
         {% block content %}{% endblock %}
     </div>
 
-    {% from 'macros.html' import footer %}
+    {# `with context` so the macro can see current_year from the context
+       processor; a plain import would not, and the year silently froze at 2025. #}
+    {% from 'macros.html' import footer with context %}
     {{ footer() }}
 
     <script src="{{ url_for('static', filename='js/status_badge.js') }}"></script>

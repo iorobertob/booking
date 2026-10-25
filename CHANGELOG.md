@@ -5,6 +5,39 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.1 — 2026-10-25 — Item categories
+- **Per-faculty categories** (`Category`), **many-to-many with items** (`item_categories`). An item can
+  sit in several at once — the ZYLIA is both a Microphone and Spatial Audio — so the overlaps in the
+  coordinator's proposal stop forcing arbitrary filing decisions.
+- **Seeded for MISC**: the coordinator's twelve with two merges agreed with the user — Audio Interfaces
+  joined to Mixers & Processing (the XR18 is genuinely both), and the two overlapping "accessories"
+  buckets combined. **Ten categories, all empty**; items are filed by hand.
+- **Assignment works in both directions**: a bulk picker per category
+  (`/admin/category/<id>/items`), and category checkboxes on the add/edit item forms. Both refuse to
+  file an item under another faculty's category.
+- **Cards on each faculty home page**, clicking one filters the equipment list. Admins also get an
+  "uncategorised" card for the unfiled backlog.
+- **Card images** upload to `static/uploads/` (gitignored): extension allowlist, a real size check on
+  the stream rather than trusting Content-Length, and per-category filenames with a cache-buster since
+  nginx serves `/static` with `expires max`.
+- **Liquid-glass styling**: cards transmit the page behind them (low-alpha tint plus
+  `backdrop-filter`), with a specular bloom, a diagonal highlight staggered per card, and a lit rim.
+  Placeholders use muted shades of the site's own indigo — the previous 0-359 hue made a rainbow.
+  Cards with an uploaded image get the same treatment so they read as glass over a photo.
+- **DB migration required**: `98085de03901`.
+
+### Fixed — faculty isolation
+An audit after the category work found three leaks dating from the v4.0 faculty phases:
+- **`/bookings_admin` was entirely unscoped** — any admin saw every faculty's bookings, including
+  borrower names and email addresses, with no `require_faculty_admin` at all.
+- **`export_items` exported every faculty's inventory**, so a KIMO admin's CSV contained MISC's.
+  Now scoped, and gains a Categories column.
+- **`delete_location` / `edit_location` had no faculty guard**, and their in-use and duplicate-name
+  checks spanned all faculties — so one faculty using "Studio A" blocked another deleting their own.
+- Also fixed: the footer read `{{ current_year or 2025 }}` but nothing ever supplied `current_year`,
+  so it was frozen at 2025. Added a context processor, and imported the macro `with context` —
+  Jinja macros do not see the template context otherwise.
+
 ## v4.0.3 — 2026-10-25
 - **Added a fourth faculty: Sound Engineering** (`/?faculty=sound`, Lithuanian "Garso režisūra"). It is a
   full sub-system like the others — its own tab, equipment, locations, admin dashboard, booking log,

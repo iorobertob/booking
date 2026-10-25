@@ -505,13 +505,13 @@ sudo systemctl restart booking.service
 ---
 
 ## TODO
-* When an iitemtme is Edited form the admin dashboard, and the user clicks save, the user should be taken back to the admin's list of items to edit 
-* Add fields to user model to register sign up date and last login, booked items
-* Update to  Booked / Lent / Returned statuse — DONE (v3.3: booked / approved / lent / returned / denied)
-* Add max lending time. — DONE (v3.4: `Item.max_booking_days`, default 8) 
-* Group by categories like a music shop (microphones, instrruments, utilities, )
-* Students should add a note in their profile and/or booking on what they study and what the booking is for. DONE
-* Do not serve images from Flask — serve from nginx instead.
+* When an item is edited from the admin dashboard and saved, return to the admin's item list — **Done (v4.0.2)**
+* Add fields to user model to register sign up date and last login, booked items — *partly*: booked items are on the profile (**v4.0 phase 3**, `Booking.user_id`); sign-up date and last login are still missing
+* Update to Booked / Lent / Returned statuses — **Done (v3.3)**: booked / approved / lent / returned / denied
+* Add max lending time — **Done (v3.4)**: `Item.max_booking_days`, default 8
+* Group by categories like a music shop (microphones, instruments, utilities) — **Done (v4.1)**: per-faculty categories, many-to-many with items, cards on each faculty home page
+* Students should add a note in their profile and/or booking on what they study and what the booking is for — **Done (v2.1)**
+* Do not serve images from Flask — serve from nginx instead. — **Done** (nginx `location ^~ /booking/static/` serves them directly; server config, not code)
 * Simplify the email templates (currently bloated HTML).
 * Implement Flask Blueprints.
 * Add the LMTA email to the booking item (in case users falsify identity).
@@ -519,22 +519,22 @@ sudo systemctl restart booking.service
 * Find out if it is necessary to send booked dates back and forth, or handle everything in session.
 * DataTables alternative?
 * Refactor: `url_for('book_cart')` and `url_for('book')` are always the same — no need to pass them as data attributes to the JS script.
-* Return to same page search/filter conditions when going back.
+* Return to same page search/filter conditions when going back. — **Done (v3.6.2)**: DataTables `stateSave` on the admin tables
 * Bulk deny bookings by checkbox selection.
 * Bulk or individually mark as returned. 
 * Mark as lent or returned in bulk.
-* Grouping items and show quantity available.
+* Grouping items and show quantity available. — *partly*: grouping done in **v4.1**; quantity/stock counts still missing
 * Connect to Google Calendar and/or apple and/or outlook
-* Note on return about state of item.
-* Comments on item pages.
-* Add [random/deterministic] colours to booking calendar (partially done — `colorFromString()` in `item_detail_modals.js`).
+* Note on return about state of item. — **Done (v4.0 phase 3)**: admin notes on a borrower's profile, with borrower replies
+* Comments on item pages. — *not yet*: comments exist on borrower profiles (v4.0 phase 3), not on items
+* Add [random/deterministic] colours to booking calendar — **Done (v2.1)**: `colorFromString()` in `item_detail_modals.js`
 * Check the password security of accounts created via MS Login.
 * Extend daily reminder job to cover v3+ group bookings (currently only queries old-style `Booking` rows).
 * Keep sending reminders while item is "lent" and include a message asking admin to mark it returned.
 * Decide whether to send reminder emails to admins.
 * Bulk delete items by checkbox.
-* Add a Booking Log — DONE (v3.4: admin dashboard → History)
-* iCloud Passwords / console errors on dynamically created modals — addressed in v3.5.1 via `autocomplete` attributes; re-check if prompts reappear
+* Add a Booking Log — **Done (v3.4)**: admin dashboard → History
+* iCloud Passwords / console errors on dynamically created modals — **Done (v3.5.1)**: `autocomplete` attributes; re-check if prompts reappear
 * Add possibility to return items individually that were bulk booked/lent.
 * Add a reminder in the return email to take a photo of where the item was left. (integrate on the phone)
 
