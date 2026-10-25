@@ -505,6 +505,7 @@ sudo systemctl restart booking.service
 ---
 
 ## TODO
+* When an itme is Edited form the admin dashboard, and the user clicks save, the user should be taken back to the admin's list of items to edit 
 * Add fields to user model to register sign up date and last login, booked items
 * Update to  Booked / Lent / Returned statuse — DONE (v3.3: booked / approved / lent / returned / denied)
 * Add max lending time. — DONE (v3.4: `Item.max_booking_days`, default 8) 
