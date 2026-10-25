@@ -148,6 +148,9 @@ DEFAULT_FACULTIES = [
     {"code": "theatre", "short_name": "Theatre & Dance",
      "name": "Theatre and Dance",
      "name_lt": "Teatras ir šokis", "sort_order": 3},
+    {"code": "sound",   "short_name": "Sound Engineering",
+     "name": "Sound Engineering",
+     "name_lt": "Garso režisūra", "sort_order": 4},
 ]
 
 

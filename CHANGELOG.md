@@ -5,6 +5,15 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.0.3 — 2026-10-25
+- **Added a fourth faculty: Sound Engineering** (`/?faculty=sound`, Lithuanian "Garso režisūra"). It is a
+  full sub-system like the others — its own tab, equipment, locations, admin dashboard, booking log,
+  per-faculty admins and scoped notification emails — because faculties are data-driven: the only code
+  change is one entry in `DEFAULT_FACULTIES`. No migration; `create_default_faculties()` seeds it on
+  deploy and is idempotent.
+- It starts with **no admins**, so until a super admin grants rights in the Users section, only super
+  admins can open its dashboard.
+
 ## v4.0.2 — 2026-10-25
 - **Editing an item from the admin dashboard now returns to the items list.** The `edit_item` route
   already honoured a `next` field, but neither the dashboard's Edit link nor `edit_item.html` supplied
