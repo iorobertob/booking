@@ -68,7 +68,9 @@ Read via `_cfg()` helper (`main.py:48`): env vars first, then `vars/vars.json`. 
 `unit_tests.py` — run with `python unit_tests.py`. No test framework beyond stdlib `unittest`. Tests are minimal; verify critical paths manually when touching `book`, `is_item_available`, or auth flows.
 
 ## Documentation Rule
-**All new features, route changes, and model changes must be documented in `README.md`** — update the relevant section (Models, Routes Reference, Booking Flow, Changelog) as part of the same commit.
+**All new features, route changes, and model changes must be documented** as part of the same commit:
+- `README.md` — update the relevant section (Models, Routes Reference, Booking Flow, Email Notifications).
+- `CHANGELOG.md` — add an entry at the top. The changelog lives here, not in the README.
 
 ## Additional Documentation
 Check these when working on the relevant areas:
@@ -81,6 +83,7 @@ Check these when working on the relevant areas:
 | Email templates and triggers | `README.md#email-notifications` |
 | Dark mode implementation | `README.md#dark-mode` |
 | DB migration history and migrate.sh usage | `README.md#db-migrations` |
+| Release history | `CHANGELOG.md` |
 | Deployment and scheduler | `README.md#production-deployment` |
 
 
