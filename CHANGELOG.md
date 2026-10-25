@@ -5,14 +5,14 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
-## v4.0.3 — 2026-10-25
-- **Added a fourth faculty: Sound Engineering** (`/?faculty=sound`, Lithuanian "Garso režisūra"). It is a
-  full sub-system like the others — its own tab, equipment, locations, admin dashboard, booking log,
-  per-faculty admins and scoped notification emails — because faculties are data-driven: the only code
-  change is one entry in `DEFAULT_FACULTIES`. No migration; `create_default_faculties()` seeds it on
-  deploy and is idempotent.
-- It starts with **no admins**, so until a super admin grants rights in the Users section, only super
-  admins can open its dashboard.
+## v4.0.2 — 2026-10-25
+- **Editing an item from the admin dashboard now returns to the items list.** The `edit_item` route
+  already honoured a `next` field, but neither the dashboard's Edit link nor `edit_item.html` supplied
+  one, so saving always landed on the public home page. The link now passes the dashboard URL
+  (preserving the faculty), the form carries it through, and **Cancel** returns to the same place.
+- **Hardened the `next` redirects.** Six routes redirected to a caller-supplied `next` without checking
+  it — an open redirect, which this change would have leaned on more heavily. They now share
+  `_safe_next()`, which accepts only same-site paths and logs anything else.
 
 ## v4.0.1 — 2026-10-19 — migrate.sh seeders never ran
 - **`migrate.sh` aborted silently on every real run.** Its `run()` helper used `eval "$@"`, which

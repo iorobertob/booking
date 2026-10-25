@@ -14,6 +14,9 @@
 
         <form method="post" action="">
 
+            {# Where to return after saving — the admin list they came from. #}
+            <input type="hidden" name="next" value="{{ next_url }}">
+
             <div class="mb-3">
                 <label for="name" class="form-label">Item Name</label>
                 <input type="text" id="name" name="name" required class="form-control" value="{{ item.name }}">
@@ -51,7 +54,7 @@
                 <button type="submit" class="btn btn-primary" style="background-color: #34495e; border: none;">
                     Update Item
                 </button>
-                <a href="{{ url_for('home') }}" class="btn btn-link text-muted text-center">Cancel</a>
+                <a href="{{ next_url }}" class="btn btn-link text-muted text-center">Cancel</a>
             </div>
 
         </form>

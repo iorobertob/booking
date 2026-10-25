@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import pymysql
 import json
 import csv
+from urllib.parse import urlparse
 import io
 import os
 from dotenv import load_dotenv
@@ -1735,6 +1736,22 @@ def return_item(booking_id):
     return redirect(request.referrer or url_for('home'))
 
 
+def _safe_next(default_endpoint='home', **default_kwargs):
+    """Where to go after a form submits, from `next`, falling back to a default.
+
+    Only same-site paths are accepted. `next` arrives from the request, so an
+    absolute URL would turn these redirects into an open redirect — a phishing
+    link on your own domain that bounces to someone else's.
+    """
+    candidate = request.form.get('next') or request.args.get('next')
+    if candidate:
+        parsed = urlparse(candidate)
+        if not parsed.scheme and not parsed.netloc and candidate.startswith('/'):
+            return candidate
+        logger.warning("Ignoring off-site next URL: %r", candidate)
+    return url_for(default_endpoint, **default_kwargs)
+
+
 def _max_booking_days_from_form(form, fallback=DEFAULT_MAX_BOOKING_DAYS):
     """Read max_booking_days from an admin form, falling back on blank/invalid input."""
     raw = (form.get('max_booking_days') or '').strip()
@@ -1761,7 +1778,7 @@ def add_item():
         db.session.add(new_item)
         db.session.commit()
         flash(f'Item {name} added successfully!', 'success')
-        next_url = request.form.get('next') or url_for('home')
+        next_url = _safe_next('home')
         return redirect(next_url)
 
     faculty = current_faculty()
@@ -1775,9 +1792,12 @@ def edit_item(item_id):
     if request.method == 'GET':
         item = Item.query.get_or_404(item_id)
         require_faculty_admin(item.faculty)
+        # Carry `next` through the form so saving returns the admin to the
+        # list they started from, rather than dropping them on the home page.
         return render_template('edit_item.html', item=item,
                                locations=locations_for_faculty(item.faculty),
-                               faculty=item.faculty)
+                               faculty=item.faculty,
+                               next_url=_safe_next('home'))
 
     if request.method == 'POST':
         name        = request.form.get('name')
@@ -1791,7 +1811,7 @@ def edit_item(item_id):
             request.form, fallback=existing_item.max_booking_days or DEFAULT_MAX_BOOKING_DAYS)
         db.session.commit()
         flash(f'Item {name} edited successfully!', 'success')
-        next_url = request.form.get('next') or url_for('home')
+        next_url = _safe_next('home')
         return redirect(next_url)
 
 
@@ -1804,7 +1824,7 @@ def delete_item(item_id):
     db.session.delete(item)
     db.session.commit()
     flash(f'Item {name} deleted successfully!', 'success')
-    next_url = request.form.get('next') or url_for('home')
+    next_url = _safe_next('home')
     return redirect(next_url)
 
 
@@ -1957,7 +1977,7 @@ def locations():
 @admin_required
 def add_location():
     name = request.form.get('name', '').strip()
-    next_url = request.form.get('next') or url_for('locations')
+    next_url = _safe_next('locations')
     if name:
         faculty = current_faculty()
         fid = faculty.id if faculty else None
@@ -1975,7 +1995,7 @@ def add_location():
 @admin_required
 def delete_location(location_id):
     loc = Location.query.get_or_404(location_id)
-    next_url = request.form.get('next') or url_for('locations')
+    next_url = _safe_next('locations')
     if Item.query.filter_by(location=loc.name).first():
         flash(f'Cannot delete "{loc.name}": items reference it.', 'danger')
     else:
@@ -1990,7 +2010,7 @@ def delete_location(location_id):
 def edit_location(location_id):
     loc = Location.query.get_or_404(location_id)
     name = request.form.get('name', '').strip()
-    next_url = request.form.get('next') or url_for('locations')
+    next_url = _safe_next('locations')
     if not name:
         flash('Location name cannot be empty.', 'danger')
     elif Location.query.filter(Location.name == name, Location.id != location_id).first():
