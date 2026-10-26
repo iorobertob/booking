@@ -5,6 +5,32 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.4.2 — 2026-10-26 — Remove the refraction; the seam was intrinsic to it
+The v4.4.1 fix was not enough: the hard band a few pixels inside a hovered card was still there.
+Measuring the lens had shown it no longer sampled outside the card, which was true — but that was
+never the whole cause, and the refraction has now been removed entirely.
+
+Verified by direct A/B in the browser at the real card size: with the lens disabled the card is
+uniformly smooth; with it enabled the band reappears. The two requirements are in conflict at this
+size. Displacement must fall to zero at the rim, because `backdrop-filter` clips the backdrop to
+the card's own box. On a 150px-tall card that leaves about 75px of radius for the offset to rise
+and fall again, and any offset large enough to notice over that distance shears the backdrop
+steeply enough to break the diagonal weave into visibly offset segments — which is the band.
+Ramps from a sharp knee to a ten-stop curve were tried at scales from 9 to 24: gentle enough to
+hide the band is also too gentle to see.
+
+So the cards are frosted glass now — `blur(22px) saturate(180%)` with the lit rim, foot-weighted
+scrim and pointer-tracked specular all unchanged — which is what every shipping "glass" surface on
+the web actually does. Apple gets away with real refraction by sampling a full-resolution normal
+map on a GPU surface, not a stretched raster inside a clipped backdrop. The `#glassLens` SVG and
+its `@supports` rule are gone; the reasoning is recorded in `booking.css` so it is not
+reintroduced.
+
+The weave backdrop stays: without refraction it still gives the blur something to scatter, which
+is what makes the cards read as translucent rather than as flat tinted panels.
+
+---
+
 ## v4.4.1 — 2026-10-26 — Fix the torn edge on hovered category cards
 Hovering a card showed a hard rectangular seam a few pixels inside its border, with the backdrop
 texture visibly offset across it. Two bugs in the refraction lens, both at the rim.

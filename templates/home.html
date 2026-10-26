@@ -38,35 +38,12 @@
    The page background is a smooth gradient, so blurring (or even refracting)
    it returns the same flat colour — which is why the cards read as painted
    panels rather than glass. This layer puts soft colour and a fine diagonal
-   texture directly behind the grid, giving the material something to bend and
-   scatter. It sits behind the cards only, so it cannot affect the readability
-   of the equipment table below. #}
+   texture directly behind the grid, so the blur has something to scatter and
+   the cards read as translucent. It sits behind the cards only, so it cannot
+   affect the readability of the equipment table below. #}
 <div class="category-stage">
 <div class="category-backdrop" aria-hidden="true"></div>
 
-{# Lens used by the refraction rule in booking.css. Grey (128,128) is "no
-   displacement"; R drives the horizontal sample offset and G the vertical.
-
-   The shape of the ramp matters more than its strength. backdrop-filter clips
-   the backdrop to the card's own box, so any displacement at the very rim
-   samples from outside that box — where there is nothing — and leaves a hard
-   seam a few pixels inside the border. So the lens is neutral at the rim,
-   peaks in a band set in from it, and is neutral again in the middle: the
-   bending happens where there is still backdrop on both sides to bend.
-   The peak offset (~4px) stays well under that band's inset (~10px), which is
-   what keeps the seam from reappearing.
-
-   The rects are deliberately square-cornered. With a rounded `rx` the area
-   outside the corner radius is transparent black — R=0, G=0 — which reads as
-   maximum negative displacement and tore each corner. #}
-<svg class="glass-defs" width="0" height="0" aria-hidden="true" focusable="false">
-  <filter id="glassLens" x="-20%" y="-20%" width="140%" height="140%"
-          color-interpolation-filters="sRGB">
-    <feImage result="lensMap" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><defs><radialGradient id='r' cx='50%25' cy='50%25' r='50%25'><stop offset='0.55' stop-color='rgb(128,128,0)'/><stop offset='0.86' stop-color='rgb(196,196,0)'/><stop offset='1' stop-color='rgb(128,128,0)'/></radialGradient></defs><rect width='240' height='160' fill='rgb(128,128,0)'/><rect width='240' height='160' fill='url(%23r)'/></svg>"/>
-    <feDisplacementMap in="SourceGraphic" in2="lensMap" scale="15"
-                       xChannelSelector="R" yChannelSelector="G"/>
-  </filter>
-</svg>
 
 <div class="category-grid">
     {% for c in categories %}
