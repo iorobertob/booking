@@ -550,25 +550,25 @@ td.clickable-cell:hover {
                  0 2px 14px rgba(0, 0, 0, 0.55);
 }
 
-/* ── Why there is no refraction here ──────────────────────────────────────
-   v4.3 bent the backdrop with an SVG feDisplacementMap on backdrop-filter.
-   It was removed in v4.4.2 because the two things it needs are in conflict
-   at this size.
-
-   Displacement has to fall to zero at the card's rim — backdrop-filter clips
-   the backdrop to the card's own box, so any offset at the edge samples
-   pixels that do not exist and leaves a hard seam. On a 150px-tall card that
-   leaves ~75px of radius for the offset to rise and fall again. Any offset
-   large enough to see across that distance shears the backdrop steeply
-   enough to break the diagonal weave into visibly offset segments — a band
-   a few pixels inside the border, which is what it looked like in practice.
-   Tested directly: a ramp gentle enough to hide the band is also too gentle
-   to see, at every scale between 9 and 24.
-
-   The blur below is doing the work instead, which is what every shipping
-   "glass" surface on the web does. Apple gets away with real refraction
-   because it samples a full-resolution normal map on a GPU surface, not a
-   stretched raster inside a clipped backdrop. */
+/* ── Real refraction, where the engine can do it ───────────────────────────
+   feDisplacementMap bends the backdrop instead of only blurring it, which is
+   the one part of Apple's material the web can genuinely reproduce.
+   Gated twice on purpose:
+     - @supports for engines that implement SVG filters in backdrop-filter
+     - the -webkit-hyphens test excludes Safari, which reports support for
+       `url()` here but does not render it correctly; it keeps the blur path.
+   Anything unsupported simply keeps the rule above, so nothing regresses. */
+@supports (backdrop-filter: url(#glassLens)) {
+    @supports not (-webkit-hyphens: none) {
+        .category-card {
+            backdrop-filter: url(#glassLens) blur(7px) saturate(185%) brightness(1.06);
+        }
+        /* Deliberately no hover variant. backdrop-filter does not interpolate,
+           so changing the blur on hover snapped the whole refracted texture in
+           one frame — read as the card tearing rather than lifting. The lift,
+           rim and specular carry the hover; the material stays put. */
+    }
+}
 
 .category-card__count {
     color: rgba(255, 255, 255, 0.82);
@@ -697,11 +697,21 @@ td.clickable-cell:hover {
                          var(--mx, 10%) var(--my, -12%);
     mix-blend-mode: screen;             /* contained by `isolation: isolate` */
     opacity: 0.9;
+    /* Oversized at rest so the drift below has room. This layer lightens what
+       it covers, and the card clips it, so if its own edge ever slides inside
+       the card you get a hard line with lit glass on one side and unlit on the
+       other — which is exactly what the 7%/-5% hover drift used to do along
+       the left and bottom edges. Scaling (rather than a bigger `inset`) keeps
+       the background percentages mapped to the element box, so the streak and
+       the pointer-tracked bloom land where they did before. */
+    transform: scale(1.16);
     transition: transform 0.5s ease, opacity 0.3s ease;
 }
 .category-card:hover::after,
 .category-card:focus-visible::after {
-    transform: translate3d(7%, -5%, 0) scale(1.06);
+    /* Stays within the headroom above: at scale 1.22 the layer reaches -11%
+       and 111%, and 7%/-5% of drift leaves every edge outside the card. */
+    transform: translate3d(7%, -5%, 0) scale(1.22);
     opacity: 1;
 }
 

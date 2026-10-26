@@ -5,6 +5,36 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.4.3 — 2026-10-26 — The seam was the specular layer, and the refraction is back
+The division line down the left and across the bottom of a hovered card was never the glass. It was
+`.category-card::after`, the specular highlight.
+
+That layer sits at `inset: 0` — exactly the card — and blends with `mix-blend-mode: screen`, so it
+lightens whatever it covers. On hover it took `translate3d(7%, -5%, 0) scale(1.06)`, sliding right
+and up, which brought its own rectangular edge inside the card: lit glass on one side of that edge,
+unlit on the other, along the left and the bottom. Nothing else in the stack moves on hover in a way
+that could produce two edges on exactly those two sides.
+
+The geometry is exact rather than suggestive. With `transform-origin` at the centre, the old hover
+put the layer's left edge at 4% of the card's width and its bottom edge at 98% of its height — both
+inside. On the 1300px-wide card in the report, 4% is 52px, which is where the line was.
+
+- **Fixed** by giving the layer headroom: `scale(1.16)` at rest, `translate3d(7%, -5%, 0) scale(1.22)`
+  on hover. Every edge now lands outside the card — left −4%, right 118%, top −16%, bottom 106% — so
+  the drift survives and the edge never enters. Scaling rather than a larger `inset` keeps the
+  background percentages mapped to the element box, so the streak and the pointer-tracked bloom land
+  where they did before.
+- **Reverted v4.4.2.** The refraction was removed on a misdiagnosis: the A/B that appeared to clear
+  the card with the lens disabled was measuring the specular edge, which was present either way. Both
+  the `#glassLens` filter and the `@supports` rule are restored, including the v4.4.1 rim and corner
+  fixes, which were genuine bugs on their own. Re-checked with the specular fix in place: the lens is
+  clean at the real card size.
+
+The v4.4.2 reasoning about displacement near a clipped rim is still correct as far as it goes — it
+simply was not the cause of what was on screen.
+
+---
+
 ## v4.4.2 — 2026-10-26 — Remove the refraction; the seam was intrinsic to it
 The v4.4.1 fix was not enough: the hard band a few pixels inside a hovered card was still there.
 Measuring the lens had shown it no longer sampled outside the card, which was true — but that was
