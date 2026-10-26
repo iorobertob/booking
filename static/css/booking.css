@@ -563,10 +563,10 @@ td.clickable-cell:hover {
         .category-card {
             backdrop-filter: url(#glassLens) blur(7px) saturate(185%) brightness(1.06);
         }
-        .category-card:hover,
-        .category-card:focus-visible {
-            backdrop-filter: url(#glassLens) blur(5px) saturate(200%) brightness(1.1);
-        }
+        /* Deliberately no hover variant. backdrop-filter does not interpolate,
+           so changing the blur on hover snapped the whole refracted texture in
+           one frame — read as the card tearing rather than lifting. The lift,
+           rim and specular carry the hover; the material stays put. */
     }
 }
 

@@ -5,6 +5,28 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.4.1 — 2026-10-26 — Fix the torn edge on hovered category cards
+Hovering a card showed a hard rectangular seam a few pixels inside its border, with the backdrop
+texture visibly offset across it. Two bugs in the refraction lens, both at the rim.
+
+- **The lens displaced the backdrop hardest exactly at the rim** (the gradient reached its maximum
+  at offset 1.0). `backdrop-filter` clips the backdrop to the card's own box, so a 5.8px offset at
+  the rim sampled pixels that do not exist — which is the seam. The ramp now peaks in a band set in
+  from the edge and returns to neutral at the edge itself: 0.03px of displacement at the rim, with
+  the 4px peak sitting 10–15px inside, so every sample stays within the card.
+- **The map's corners were transparent.** Both rects in the lens image carried `rx='18'`, so the
+  area outside the corner radius was transparent black — read as R=0, G=0, i.e. −9px of displacement
+  in both axes. The rects are square-cornered now; the gradient alone shapes the lens.
+
+Displacement scale dropped 18 → 15 to keep the peak comfortably under its inset.
+
+Also: the hover no longer changes `backdrop-filter`. It was going from `blur(7px)` to `blur(5px)`,
+and since `backdrop-filter` does not interpolate, the whole refracted texture snapped in a single
+frame — the "displaced a bit" part of the report. The lift, rim and specular carry the hover now;
+the material stays put.
+
+---
+
 ## v4.4 — 2026-10-26 — No more hard refreshing
 Deploying new CSS or JS used to be invisible to anyone whose browser had already cached the old
 copy: nginx serves `/booking/static/` with `expires max`, so the only cure was asking people to
