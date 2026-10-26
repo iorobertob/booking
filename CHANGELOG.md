@@ -5,6 +5,31 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.3 — 2026-10-26 — Category cards: actual refraction, and something to refract
+The previous cards were a stylistic approximation of Apple's Liquid Glass. Three changes close
+most of the gap the web can close.
+
+- **A stage behind the grid.** The real limit was not the filter but the backdrop: the page is a
+  smooth gradient, so blurring *or* refracting it returns the same flat colour. A feathered layer of
+  soft colour pools and a fine diagonal weave now sits behind the cards — enough structure for the
+  material to bend and scatter — scoped to the grid so it cannot affect the equipment table.
+- **Real refraction** via an SVG `feDisplacementMap` on `backdrop-filter`, which bends the backdrop
+  rather than smearing it. The lens map is neutral in the centre and ramps at the rim, as light does
+  through thick glass. Gated on `@supports`, and additionally excluded on Safari, which reports
+  support for `url()` here but does not render it; those engines keep the blur path unchanged.
+- **The glass had to transmit.** The card wash and scrim were opaque enough to hide the stage, so the
+  refraction had nothing visible to work on. The wash is now much thinner and the scrim weighted to
+  the foot where the title sits.
+- **Pointer-tracked specular** — the highlight follows the cursor, so a card reads as a lit surface
+  rather than a fixed gradient. Progressive enhancement: skipped for touch devices and for
+  `prefers-reduced-motion`, with the per-card stagger as the fallback. Tilt via DeviceOrientation was
+  deliberately not used; iOS requires a permission prompt on a user gesture, which is far too
+  intrusive for someone browsing for a microphone.
+
+Still out of reach in a browser, and the reason this remains an approximation: Apple samples backdrop
+luminance per region in real time to keep the material legible, and morphs controls with fluid
+dynamics. Neither has a web API.
+
 ## v4.2 — 2026-10-25 — User sign-up date and last login
 - **`User.created_at`** and **`User.last_login_at`**. Both login paths — local and Microsoft SSO —
   stamp the latter through a single `record_login()` helper, which commits separately so a failure

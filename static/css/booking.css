@@ -411,6 +411,48 @@ td.clickable-cell:hover {
    and every rule degrades to a plain tinted card where it is unsupported.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ── The stage behind the cards ────────────────────────────────────────────
+   Glass only reads as glass when there is structure behind it to bend and
+   scatter. The site background is a smooth gradient, so the cards had nothing
+   to work with. This gives them soft colour plus a fine diagonal weave —
+   enough structure to see the material working, faint enough not to compete
+   with the titles. */
+.category-stage {
+    position: relative;
+    isolation: isolate;
+}
+.category-backdrop {
+    position: absolute;
+    /* bleeds past the grid so the outer cards sit over texture too */
+    inset: -14px -10px -10px;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        /* the weave: what refraction actually has to bend */
+        repeating-linear-gradient(68deg,
+            rgba(255, 255, 255, 0.10) 0 2px,
+            transparent 2px 20px),
+        /* soft colour pools in the theme's own range */
+        radial-gradient(44% 62% at 14% 20%, hsl(252 66% 62% / 0.70) 0%, transparent 62%),
+        radial-gradient(40% 58% at 86% 24%, hsl(212 70% 58% / 0.58) 0%, transparent 62%),
+        radial-gradient(48% 64% at 60% 90%, hsl(168 56% 48% / 0.40) 0%, transparent 64%);
+    filter: blur(1px);
+    opacity: 1;
+    /* Feathered, so the stage reads as ambient light behind the cards rather
+       than a tray with a visible rounded edge. */
+    -webkit-mask-image: radial-gradient(96% 88% at 50% 44%, #000 18%, transparent 78%);
+            mask-image: radial-gradient(96% 88% at 50% 44%, #000 18%, transparent 78%);
+}
+:root:not([data-bs-theme="dark"]) .category-backdrop {
+    background:
+        repeating-linear-gradient(68deg,
+            rgba(60, 70, 140, 0.055) 0 2px,
+            transparent 2px 22px),
+        radial-gradient(42% 60% at 14% 22%, hsl(252 72% 70% / 0.42) 0%, transparent 62%),
+        radial-gradient(38% 55% at 84% 26%, hsl(214 76% 70% / 0.36) 0%, transparent 62%),
+        radial-gradient(46% 62% at 62% 88%, hsl(168 56% 62% / 0.26) 0%, transparent 64%);
+}
+
 .category-grid {
     display: grid;
     /* auto-fit + minmax is the whole responsive story: 4 across on a desktop,
@@ -508,6 +550,26 @@ td.clickable-cell:hover {
                  0 2px 14px rgba(0, 0, 0, 0.55);
 }
 
+/* ── Real refraction, where the engine can do it ───────────────────────────
+   feDisplacementMap bends the backdrop instead of only blurring it, which is
+   the one part of Apple's material the web can genuinely reproduce.
+   Gated twice on purpose:
+     - @supports for engines that implement SVG filters in backdrop-filter
+     - the -webkit-hyphens test excludes Safari, which reports support for
+       `url()` here but does not render it correctly; it keeps the blur path.
+   Anything unsupported simply keeps the rule above, so nothing regresses. */
+@supports (backdrop-filter: url(#glassLens)) {
+    @supports not (-webkit-hyphens: none) {
+        .category-card {
+            backdrop-filter: url(#glassLens) blur(7px) saturate(185%) brightness(1.06);
+        }
+        .category-card:hover,
+        .category-card:focus-visible {
+            backdrop-filter: url(#glassLens) blur(5px) saturate(200%) brightness(1.1);
+        }
+    }
+}
+
 .category-card__count {
     color: rgba(255, 255, 255, 0.82);
     font-size: 0.8rem;
@@ -521,21 +583,28 @@ td.clickable-cell:hover {
    page still shows through and the card matches the ones that do have images.
    --cat-hue is confined to a band around the theme hue (see Category.color_hue). */
 .category-card--placeholder .category-card__media {
+    /* Deliberately thin. A heavier wash hid the stage behind the card, which
+       left the refraction with nothing visible to bend — the glass has to
+       transmit for any of this to read. The title's own shadow carries
+       legibility where the scrim is lightest. */
     background-image:
         radial-gradient(125% 95% at 16% -8%,
-            hsl(var(--cat-hue, 245) 48% 68% / 0.34) 0%,
-            hsl(var(--cat-hue, 245) 42% 50% / 0.14) 46%,
+            hsl(var(--cat-hue, 245) 48% 70% / 0.20) 0%,
+            hsl(var(--cat-hue, 245) 42% 52% / 0.07) 46%,
             transparent 74%),
         linear-gradient(152deg,
-            hsl(var(--cat-hue, 245) 36% 34% / 0.50) 0%,
-            hsl(calc(var(--cat-hue, 245) + 14) 40% 20% / 0.38) 100%);
+            hsl(var(--cat-hue, 245) 36% 36% / 0.26) 0%,
+            hsl(calc(var(--cat-hue, 245) + 14) 40% 22% / 0.18) 100%);
 }
 /* With an image, the scrim can be gentler — the picture carries the card. */
 .category-card--placeholder::before {
+    /* Weighted to the foot, where the text sits; the upper two thirds stay
+       almost clear so the stage shows through the glass. */
     background: linear-gradient(to top,
-                rgba(10, 10, 30, 0.55) 0%,
-                rgba(10, 10, 30, 0.18) 55%,
-                rgba(10, 10, 30, 0.04) 100%);
+                rgba(10, 10, 30, 0.62) 0%,
+                rgba(10, 10, 30, 0.30) 32%,
+                rgba(10, 10, 30, 0.04) 68%,
+                rgba(10, 10, 30, 0.00) 100%);
 }
 
 /* Light mode: the page behind is pale, so near-white glass loses its edge.
@@ -621,7 +690,11 @@ td.clickable-cell:hover {
        identical reflections reads as a repeated texture, not as glass.
        --cat-hue (218-272) doubles as the per-card seed, no extra markup. */
     background-size: 260% 260%, 100% 100%;
-    background-position: calc((var(--cat-hue, 245) - 218) * 1.9%) 0%, 0% 0%;
+    /* --mx/--my are set by the pointer handler in home.html; they default to
+       the card's own stagger so the highlight is still placed sensibly before
+       the cursor arrives, and on touch devices that never set them. */
+    background-position: calc((var(--cat-hue, 245) - 218) * 1.9% + var(--mx, 0%) * 0.35) 0%,
+                         var(--mx, 10%) var(--my, -12%);
     mix-blend-mode: screen;             /* contained by `isolation: isolate` */
     opacity: 0.9;
     transition: transform 0.5s ease, opacity 0.3s ease;

@@ -34,6 +34,28 @@
    so a card without an uploaded image still looks deliberate and is stable
    across page loads. #}
 {% if categories or show_uncategorised %}
+{# ── Glass needs something behind it ───────────────────────────────────────
+   The page background is a smooth gradient, so blurring (or even refracting)
+   it returns the same flat colour — which is why the cards read as painted
+   panels rather than glass. This layer puts soft colour and a fine diagonal
+   texture directly behind the grid, giving the material something to bend and
+   scatter. It sits behind the cards only, so it cannot affect the readability
+   of the equipment table below. #}
+<div class="category-stage">
+<div class="category-backdrop" aria-hidden="true"></div>
+
+{# Lens used by the refraction rule in booking.css. Neutral grey in the centre
+   means no displacement there; the ramp towards the rim pushes the backdrop
+   outward, the way light bends through the thick edge of real glass. #}
+<svg class="glass-defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <filter id="glassLens" x="-20%" y="-20%" width="140%" height="140%"
+          color-interpolation-filters="sRGB">
+    <feImage result="lensMap" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><defs><radialGradient id='r' cx='50%25' cy='50%25' r='52%25'><stop offset='0.5' stop-color='rgb(128,128,0)'/><stop offset='1' stop-color='rgb(216,216,0)'/></radialGradient></defs><rect width='240' height='160' rx='18' fill='rgb(128,128,0)'/><rect width='240' height='160' rx='18' fill='url(%23r)'/></svg>"/>
+    <feDisplacementMap in="SourceGraphic" in2="lensMap" scale="18"
+                       xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
 <div class="category-grid">
     {% for c in categories %}
     <a class="category-card {% if not c.image_path %}category-card--placeholder{% endif %} {% if selected_category and selected_category.id == c.id %}is-active{% endif %}"
@@ -58,6 +80,42 @@
     </a>
     {% endif %}
 </div>
+
+<script>
+/* The specular highlight tracks the pointer, so the card behaves like a lit
+   surface you are moving across rather than a static gradient. Pure
+   progressive enhancement: without JS the CSS defaults place the highlight
+   using each card's own stagger.
+   Deliberately not using DeviceOrientation for tilt on phones — iOS requires
+   an explicit permission prompt on a user gesture, which is far too intrusive
+   a thing to ask someone browsing for a microphone. */
+(function () {
+    var grid = document.querySelector('.category-stage .category-grid');
+    if (!grid || !window.matchMedia) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!window.matchMedia('(hover: hover)').matches) return;   // skip touch
+
+    var frame = null;
+    grid.addEventListener('pointermove', function (ev) {
+        var card = ev.target.closest('.category-card');
+        if (!card) return;
+        if (frame) return;                       // coalesce to one write per frame
+        frame = requestAnimationFrame(function () {
+            frame = null;
+            var r = card.getBoundingClientRect();
+            card.style.setProperty('--mx', ((ev.clientX - r.left) / r.width * 100).toFixed(1) + '%');
+            card.style.setProperty('--my', ((ev.clientY - r.top) / r.height * 100 - 30).toFixed(1) + '%');
+        });
+    });
+    grid.addEventListener('pointerleave', function () {
+        grid.querySelectorAll('.category-card').forEach(function (c) {
+            c.style.removeProperty('--mx');
+            c.style.removeProperty('--my');
+        });
+    }, true);
+}());
+</script>
+</div>{# /category-stage #}
 
 {% if selected_category or selected == 'none' %}
 <p class="mb-3">
