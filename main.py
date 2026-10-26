@@ -48,6 +48,10 @@ logger.addHandler(handler)
 
 pymysql.install_as_MySQLdb()
 
+# Identifies this run of the process; used as the cache-busting fallback when a
+# static file cannot be stat'ed.
+APP_BOOT_STAMP = str(int(time.time()))
+
 # Helper to read from env var first, then vars/vars.json fallback
 _EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$')
 
@@ -942,6 +946,51 @@ def admin_faculties_for(user):
     if not user.is_authenticated:
         return []
     return sorted(user.admin_faculties, key=lambda f: (f.sort_order, f.id))
+
+
+# ── Cache busting for static assets ──────────────────────────────────────────
+# nginx serves /booking/static/ with `expires max`, so a deployed CSS or JS
+# change would otherwise sit unseen in people's browsers until they hard
+# refreshed. Every url_for('static', ...) gets a ?v= stamp taken from the
+# file's modification time: `git pull` rewrites the mtime of files it changes,
+# so those URLs change and are refetched, while untouched files keep their URL
+# and stay cached. Stat results are memoised per worker, and gunicorn restarts
+# on deploy, so the cache cannot go stale.
+_static_version_cache = {}
+
+
+def _static_version(filename):
+    cached = _static_version_cache.get(filename)
+    if cached is not None:
+        return cached
+    try:
+        version = str(int(os.stat(os.path.join(app.static_folder, filename)).st_mtime))
+    except OSError:
+        # Missing file, or an uploaded image removed since the page was built:
+        # fall back to the process start time rather than failing to build a URL.
+        version = APP_BOOT_STAMP
+    _static_version_cache[filename] = version
+    return version
+
+
+@app.url_defaults
+def add_static_cache_buster(endpoint, values):
+    if endpoint == 'static' and 'filename' in values and 'v' not in values:
+        values['v'] = _static_version(values['filename'])
+
+
+@app.after_request
+def set_cache_headers(response):
+    """Keep HTML uncached so people actually receive the new asset URLs.
+
+    Versioning the assets is only half the job: if the page referencing them is
+    itself served from cache, the new URLs are never seen. Pages are small and
+    dynamic, so revalidating them costs little. Static files keep whatever
+    long-lived caching nginx gives them.
+    """
+    if response.mimetype == 'text/html':
+        response.headers.setdefault('Cache-Control', 'no-cache, must-revalidate')
+    return response
 
 
 @app.context_processor

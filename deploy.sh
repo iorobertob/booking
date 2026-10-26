@@ -38,7 +38,7 @@ run() {
     if [[ "$DRY_RUN" == "1" ]]; then
         echo -e "${YELLOW}[DRY-RUN]${RESET} $*"
     else
-        eval "$@"
+        "$@"
     fi
 }
 
@@ -79,7 +79,20 @@ info "Running migrate.sh (backup, dependencies, migrations, seeding)..."
 # since this script restarts for you a few lines down.
 CALLED_FROM_DEPLOY=1 DRY_RUN="$DRY_RUN" ./migrate.sh
 
-# ── 3. Restart the service ─────────────────────────────────────────────────
+# ── 3. Drop stale bytecode ─────────────────────────────────────────────────
+# Python keys .pyc files on source mtime, so this is belt-and-braces — but a
+# __pycache__ entry left behind by a module that no longer exists can still be
+# imported, which is a confusing way to deploy deleted code.
+echo ""
+info "Clearing stale bytecode caches..."
+if [[ "$DRY_RUN" == "1" ]]; then
+    echo -e "${YELLOW}[DRY-RUN]${RESET} find . -path ./venv -prune -o -name __pycache__ -type d -print -delete"
+else
+    find . -path ./venv -prune -o -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+    success "Bytecode caches cleared."
+fi
+
+# ── 4. Restart the service ─────────────────────────────────────────────────
 # Without this the new code is on disk but gunicorn keeps serving the old one,
 # which looks exactly like "the deploy did nothing".
 if [[ "$DO_RESTART" == "1" ]]; then
@@ -121,4 +134,6 @@ fi
 
 echo ""
 echo -e "${GREEN}${BOLD}Deploy complete.${RESET}"
-echo -e "  Hard-refresh the browser (Cmd+Shift+R) so updated CSS/JS load."
+# Static URLs carry a ?v= stamp from each file's mtime and pages are served
+# no-cache, so changed CSS/JS is picked up on the next normal page load.
+echo -e "  No hard refresh needed — updated CSS/JS is versioned automatically."

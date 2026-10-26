@@ -489,6 +489,22 @@ The app runs under gunicorn managed by systemd (`booking.service`).
 - **Path prefix**: `APPLICATION_ROOT = '/booking'` is set in production (controlled by `MISC_DEV`)
 - **Gunicorn does not execute `__main__`** — use the `MISC_DEV` env var, not `--dev`
 
+### Static asset caching
+
+nginx serves `/booking/static/` with `expires max`, so a deployed CSS or JS change would otherwise
+sit in people's browsers until they hard refreshed. Nobody has to do that:
+
+- `add_static_cache_buster()` (`main.py`, a Flask `url_defaults` hook) appends `?v=<mtime>` to every
+  `url_for('static', ...)`. Templates need no change. `git pull` rewrites the mtime of the files it
+  changed, so only those URLs change and get refetched; untouched files keep their URL and stay
+  cached. Values are memoised per worker — safe because gunicorn restarts on deploy.
+- `set_cache_headers()` sends `Cache-Control: no-cache, must-revalidate` on `text/html` only, so
+  pages always revalidate and people actually receive the new asset URLs. Downloads (CSV/XLS
+  exports) and static files keep their own headers.
+- `deploy.sh` removes stale `__pycache__` directories before restarting.
+
+Uploaded category images carry a timestamp in their filename, so a replacement is always a new URL.
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart booking.service

@@ -5,6 +5,27 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.4 — 2026-10-26 — No more hard refreshing
+Deploying new CSS or JS used to be invisible to anyone whose browser had already cached the old
+copy: nginx serves `/booking/static/` with `expires max`, so the only cure was asking people to
+hard refresh. Three changes remove that step.
+
+- **Versioned asset URLs.** Every `url_for('static', ...)` now gets a `?v=` stamp taken from the
+  file's modification time, via a Flask `url_defaults` hook — so no template had to change. `git
+  pull` rewrites the mtime of files it actually changed, so exactly those URLs change and are
+  refetched, while untouched files keep their URL and stay cached. Stat results are memoised per
+  worker, and gunicorn restarts on deploy, so the cache cannot go stale.
+- **HTML is served `no-cache, must-revalidate`.** Versioning the assets alone achieves nothing if
+  the page referencing them is itself cached — the new URLs would never be seen. Only `text/html`
+  responses are touched; downloads and static files keep their own headers.
+- **`deploy.sh` clears stale `__pycache__`** before restarting, and no longer tells you to hard
+  refresh.
+
+Uploaded category images were already safe: they are stored under a filename containing a
+timestamp, so a replacement is a new URL regardless.
+
+---
+
 ## v4.3 — 2026-10-26 — Category cards: actual refraction, and something to refract
 The previous cards were a stylistic approximation of Apple's Liquid Glass. Three changes close
 most of the gap the web can close.
