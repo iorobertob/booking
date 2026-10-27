@@ -964,7 +964,12 @@ _static_version_cache = {}
 
 
 def _static_version(filename):
-    cached = _static_version_cache.get(filename)
+    # Memoised in production, where the file cannot change without a restart,
+    # but never in development: a cached stamp there keeps emitting the old
+    # ?v= after an edit, so the URL never changes and the browser goes on
+    # serving the previous CSS from its own cache. That makes a fix look like
+    # it did not work, which is exactly how it was found.
+    cached = None if LOCALHOST else _static_version_cache.get(filename)
     if cached is not None:
         return cached
     try:
@@ -973,7 +978,8 @@ def _static_version(filename):
         # Missing file, or an uploaded image removed since the page was built:
         # fall back to the process start time rather than failing to build a URL.
         version = APP_BOOT_STAMP
-    _static_version_cache[filename] = version
+    if not LOCALHOST:
+        _static_version_cache[filename] = version
     return version
 
 

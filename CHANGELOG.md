@@ -5,6 +5,19 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5.5 — 2026-10-27 — Fix stale CSS in development
+`_static_version()` memoised each file's `?v=` stamp for the life of the process. In production
+that is correct, since a file cannot change without a restart. In development it meant that after
+editing a stylesheet the stamp kept its old value, the URL never changed, and the browser went on
+serving the previous CSS from its own cache — so a fix could look as though it had not worked.
+
+- The memo is now skipped entirely when `LOCALHOST` is set, so the stamp follows the file's mtime
+  on every request. Production behaviour is unchanged.
+- Verified: touching `booking.css` changes the emitted stamp with no restart
+  (`v=1793129850` → `v=1793130667`).
+
+---
+
 ## v4.5.4 — 2026-10-27 — The corner square was the specular highlight, not the frosting
 Measuring a screenshot of the artifact instead of reasoning about it showed that **only the
 top-left corner was ever affected**; the other three were clean. That asymmetry identifies the
