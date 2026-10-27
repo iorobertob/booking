@@ -77,6 +77,11 @@
        style="--cat-hue: {{ c.color_hue }};"
        href="{% if selected_category and selected_category.id == c.id %}{{ url_for('home', faculty=faculty.code if faculty else None) }}{% else %}{{ url_for('home', faculty=faculty.code if faculty else None, category=c.id) }}{% endif %}"
        title="{{ c.description or c.name }}">
+        {# The frosting lives on its own static layer, never on the card: Safari
+           paints a backdrop-filtered element's backdrop as a square, ignoring
+           border-radius, whenever that element is composited or repainted, and
+           the card is both on hover. This layer never changes. #}
+        <span class="category-card__glass"></span>
         <span class="category-card__media"
               {% if c.image_path %}style="background-image:url('{{ url_for('static', filename=c.image_path) }}');"{% endif %}></span>
         <h3 class="category-card__title h6">{{ c.name }}</h3>
@@ -88,6 +93,7 @@
     <a class="category-card category-card--placeholder category-card--todo {% if selected == 'none' %}is-active{% endif %}"
        href="{% if selected == 'none' %}{{ url_for('home', faculty=faculty.code if faculty else None) }}{% else %}{{ url_for('home', faculty=faculty.code if faculty else None, category='none') }}{% endif %}"
        title="Items not yet filed into a category — visible to admins only">
+        <span class="category-card__glass"></span>
         <span class="category-card__media"></span>
         <span class="category-card__glyph">&#9888;</span>
         <h3 class="category-card__title h6">Uncategorised</h3>

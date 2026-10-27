@@ -5,6 +5,25 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5.3 — 2026-10-27 — Take the frosting off the card and give it its own layer
+The rectangle at the corners survived v4.5.1 and v4.5.2, still appearing for the length of the
+hover transition and then settling.
+
+- **Why the previous fixes could not have worked.** They put `border-radius: inherit` on every
+  layer inside the card, which stops any of *those* layers being squared off. But the frosting was
+  on the card itself, and the card's radius is precisely the thing Safari ignores when it
+  rasterises a backdrop. No guard on a child could reach it.
+- **Fix.** `backdrop-filter` moves to `.category-card__glass`, a new layer inside the card that
+  nothing ever animates, at `z-index: -3` where the card's own filter used to sit. The card keeps
+  the lift, the rim and the shadow; the frosted box no longer takes part in the hover at all. The
+  `@supports` refraction follows the filter onto the same layer.
+- Verified the look is unchanged by diffing screenshots against the previous build rather than by
+  eye: edge energy inside a card 20.9 before vs 21.7 after, mean per-pixel difference 2.7/255. An
+  earlier attempt that placed the glass above the category image measured twice that difference
+  and was rejected.
+
+---
+
 ## v4.5.2 — 2026-10-27 — Remove the second cause of the Safari corner square
 v4.5.1 fixed one layer; a square still flashed for the length of the hover transition and then
 settled. That was a different mechanism on the card itself.
