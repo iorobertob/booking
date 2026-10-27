@@ -484,6 +484,7 @@ td.clickable-cell:hover {
 
 .category-card {
     position: relative;
+    top: 0;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -509,7 +510,13 @@ td.clickable-cell:hover {
                 inset 0 1px 0 rgba(255, 255, 255, 0.55),
                 inset 0 -1px 0 rgba(255, 255, 255, 0.10),
                 inset 0 0 38px rgba(255, 255, 255, 0.05);
-    transition: transform 0.22s ease, box-shadow 0.22s ease,
+    /* The lift is `top`, not `transform`, on purpose. This element carries a
+       backdrop-filter, and Safari paints a backdrop-filtered element's backdrop
+       as its square bounding box — ignoring border-radius — while a transform
+       composites it, which flashed a square outside the corners for the length
+       of the hover transition. `top` moves a relatively positioned box without
+       promoting it, and no sibling reflows. */
+    transition: top 0.22s ease, box-shadow 0.22s ease,
                 border-color 0.22s ease, background 0.22s ease;
 }
 
@@ -532,6 +539,7 @@ td.clickable-cell:hover {
     position: absolute;
     inset: 0;
     z-index: -1;
+    border-radius: inherit;             /* so a WebKit clip miss can't square it off */
     background: linear-gradient(to top,
                 rgba(10, 10, 30, 0.78) 0%,
                 rgba(10, 10, 30, 0.35) 45%,
@@ -540,7 +548,8 @@ td.clickable-cell:hover {
 
 .category-card:hover,
 .category-card:focus-visible {
-    transform: translateY(-4px);
+    top: -4px;
+    z-index: 1;                         /* the lifted card's shadow over its neighbours */
     border-color: rgba(255, 255, 255, 0.34);
     background: linear-gradient(135deg,
                 rgba(255, 255, 255, 0.16) 0%,
@@ -695,6 +704,7 @@ td.clickable-cell:hover {
     inset: 0;
     z-index: -1;
     pointer-events: none;
+    border-radius: inherit;             /* so a WebKit clip miss can't square it off */
     background:
         linear-gradient(125deg,
             rgba(255, 255, 255, 0) 36%,
@@ -766,7 +776,7 @@ td.clickable-cell:hover {
 @media (prefers-reduced-motion: reduce) {
     .category-card,
     .category-card__media { transition: none; }
-    .category-card:hover { transform: none; }
+    .category-card:hover { top: 0; }
     .category-card:hover .category-card__media { transform: scale(1.02); }
 }
 

@@ -5,6 +5,25 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5.2 — 2026-10-27 — Remove the second cause of the Safari corner square
+v4.5.1 fixed one layer; a square still flashed for the length of the hover transition and then
+settled. That was a different mechanism on the card itself.
+
+- **Cause.** `.category-card` carries `backdrop-filter` and `border-radius`, and the hover lift was
+  a `transform`. Safari paints a backdrop-filtered element's backdrop as its square bounding box,
+  ignoring the radius, while a transform composites it — so the square appeared for the 0.22s of
+  the transition and then settled back into the rounded shape. Safari takes the plain-blur path
+  here (the `-webkit-hyphens` gate keeps the SVG refraction away from it), so the backdrop-filter
+  is on the card itself, not on an inner layer.
+- **Fix.** The lift is now `top: -4px` on the already-relative card instead of a transform. Nothing
+  promotes the card, so the backdrop keeps its radius throughout. Relative offsets do not reflow
+  siblings, and `z-index: 1` on hover keeps the lifted card's shadow over its neighbours.
+- `.category-card::before` and `::after` inherit the card's radius as well. Both are `inset: 0`, so
+  their corners coincide with the card's and a missed clip cannot square them off either. Every
+  layer inside the card now carries the radius.
+
+---
+
 ## v4.5.1 — 2026-10-27 — Fix the square showing at the card corners in Safari
 Hovering a category card in Safari painted a square just outside its rounded corners. Chrome was
 unaffected.
