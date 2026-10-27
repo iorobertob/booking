@@ -673,6 +673,56 @@
             </div>
         </div>
 
+        {% if faculty %}
+        <div class="card mb-4">
+            <div class="card-header">Cards background — {{ faculty.short_name }}</div>
+            <div class="card-body">
+                <p class="text-muted small">
+                    Shown behind the category cards on this faculty's home page. It is softened and
+                    dimmed so the cards stay readable. Leave it empty for the plain tinted background.
+                </p>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        {% if faculty.background_image_path %}
+                        <img src="{{ url_for('static', filename=faculty.background_image_path) }}" alt=""
+                             class="img-fluid rounded" style="max-height:120px; object-fit:cover; width:100%;">
+                        {% else %}
+                        <div class="rounded d-flex align-items-center justify-content-center text-muted small"
+                             style="height:120px; border:1px dashed currentColor; opacity:0.6;">
+                            No background image
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-5">
+                        <form method="post" enctype="multipart/form-data"
+                              action="{{ url_for('set_faculty_background', faculty_id=faculty.id) }}">
+                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='categories', faculty=faculty.code) }}">
+                            <label class="form-label small mb-1">
+                                {% if faculty.background_image_path %}Replace image{% else %}Upload image{% endif %}
+                                <span class="text-muted">(JPG, PNG, WEBP or GIF, max 4 MB)</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="file" name="image" class="form-control" accept="image/*" required>
+                                <button type="submit" class="btn btn-primary">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                    {% if faculty.background_image_path %}
+                    <div class="col-md-3">
+                        <form method="post"
+                              action="{{ url_for('set_faculty_background', faculty_id=faculty.id) }}"
+                              onsubmit="return confirm('Remove the background image for {{ faculty.short_name }}?');">
+                            <input type="hidden" name="next" value="{{ url_for('admin_dashboard', section='categories', faculty=faculty.code) }}">
+                            <input type="hidden" name="remove_image" value="1">
+                            <button type="submit" class="btn btn-outline-danger w-100">Remove</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {% if not categories %}
         <p class="text-muted">No categories yet. Add one above — items can then be assigned to it.</p>
         {% endif %}

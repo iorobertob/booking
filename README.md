@@ -215,6 +215,19 @@ All admin routes require the user to be authenticated and have `is_admin = True`
 | POST | `/add_location` | Create a new `Location` |
 | POST | `/delete_location/<location_id>` | Delete a `Location` (blocked if any item references it) |
 
+#### Category and faculty appearance
+
+Each route is additionally scoped to the faculty that owns the row — a faculty admin who is not a
+super admin gets 403 on another faculty's categories.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/add_category` | Create a `Category` in the current faculty, with an optional card image |
+| POST | `/admin/edit_category/<category_id>` | Rename, re-describe, replace or clear the card image |
+| POST | `/admin/delete_category/<category_id>` | Delete it; its items simply become uncategorised |
+| GET/POST | `/admin/category/<category_id>/items` | Assign items to the category |
+| POST | `/admin/faculty/<faculty_id>/background` | **New in v4.5**: upload the image shown behind that faculty's category cards, or clear it with `remove_image=1`. Replacing deletes the previous file rather than orphaning it |
+
 #### Utilities
 
 | Method | Path | Description |
@@ -503,7 +516,14 @@ sit in people's browsers until they hard refreshed. Nobody has to do that:
   exports) and static files keep their own headers.
 - `deploy.sh` removes stale `__pycache__` directories before restarting.
 
-Uploaded category images carry a timestamp in their filename, so a replacement is always a new URL.
+Uploaded images — category cards (`static/uploads/categories/`) and faculty card backgrounds
+(`static/uploads/backgrounds/`) — carry a timestamp in their filename, so a replacement is always a
+new URL. Both are written by `_save_image_upload()`, which checks the extension against an allowlist
+and enforces the 4 MB limit by reading the stream rather than trusting `Content-Length`.
+`static/uploads/` is gitignored, so these files live only on the server.
+
+The background image path is stored on the faculty row: `Faculty.background_image_path`, nullable,
+relative to `static/`. Null means the plain tinted background.
 
 ```bash
 sudo systemctl daemon-reload

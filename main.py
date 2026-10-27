@@ -23,6 +23,7 @@ import atexit
 import logging
 from logging.handlers import RotatingFileHandler
 from collections import defaultdict
+import secrets
 from msal import ConfidentialClientApplication
 import time
 
@@ -167,6 +168,9 @@ class Faculty(db.Model):
     name_lt    = db.Column(db.String(150), nullable=True)                # Lithuanian
     sort_order = db.Column(db.Integer, default=0,    nullable=False)
     is_active  = db.Column(db.Boolean, default=True, nullable=False)
+    # Optional image shown behind this faculty's category cards, as a path
+    # relative to static/. Null means no backdrop image, which is the default.
+    background_image_path = db.Column(db.String(255), nullable=True)
 
     def __repr__(self):
         return f"<Faculty {self.code}>"
@@ -1952,18 +1956,19 @@ def return_item(booking_id):
     return redirect(request.referrer or url_for('home'))
 
 
-# ── Category image uploads ────────────────────────────────────────────────────
-CATEGORY_IMAGE_DIR = os.path.join('static', 'uploads', 'categories')
-ALLOWED_IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
-MAX_IMAGE_BYTES    = 4 * 1024 * 1024   # 4 MB
+# ── Image uploads ─────────────────────────────────────────────────────────────
+CATEGORY_IMAGE_DIR   = os.path.join('static', 'uploads', 'categories')
+BACKGROUND_IMAGE_DIR = os.path.join('static', 'uploads', 'backgrounds')
+ALLOWED_IMAGE_EXTS   = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+MAX_IMAGE_BYTES      = 4 * 1024 * 1024   # 4 MB
 
 
-def _save_category_image(file_storage, category):
-    """Store an uploaded card image and return its path relative to static/.
+def _save_image_upload(file_storage, directory, stem):
+    """Store an uploaded image under static/ and return its path relative to it.
 
-    Returns None when nothing usable was uploaded. The extension is checked
-    against an allowlist rather than trusting the browser's content type, and
-    the stored name is derived from the category id so one category can never
+    Returns None when nothing usable was uploaded, flashing the reason. The
+    extension is checked against an allowlist rather than trusting the browser's
+    content type, and `stem` carries the owning row's id so one row can never
     overwrite another's image.
     """
     if not file_storage or not file_storage.filename:
@@ -1983,25 +1988,39 @@ def _save_category_image(file_storage, category):
               f'{MAX_IMAGE_BYTES // 1024 // 1024} MB.', 'danger')
         return None
 
-    os.makedirs(CATEGORY_IMAGE_DIR, exist_ok=True)
+    os.makedirs(directory, exist_ok=True)
     # Cache-buster in the name: browsers hold on to /static aggressively
     # (nginx serves it with `expires max`), so a replaced image must get a new URL.
-    filename = f"category-{category.id}-{int(time.time())}{ext}"
-    file_storage.save(os.path.join(CATEGORY_IMAGE_DIR, secure_filename(filename)))
-    return f"uploads/categories/{secure_filename(filename)}"
+    # Timestamp for legibility plus a random suffix for uniqueness: two uploads
+    # within the same second would otherwise collide on the name, and the
+    # replacement would be served from cache under the old URL.
+    filename = secure_filename(f"{stem}-{int(time.time())}-{secrets.token_hex(3)}{ext}")
+    file_storage.save(os.path.join(directory, filename))
+    # Stored relative to static/, with forward slashes, because it is handed
+    # straight to url_for('static', filename=...).
+    return os.path.relpath(os.path.join(directory, filename), 'static').replace(os.sep, '/')
 
 
-def _delete_category_image(category):
-    """Remove a category's image file from disk, ignoring an already-missing one."""
-    if not category.image_path:
+def _delete_image_upload(rel_path, label):
+    """Remove an uploaded image from disk, ignoring one that is already gone."""
+    if not rel_path:
         return
-    path = os.path.join('static', category.image_path)
+    path = os.path.join('static', rel_path)
     try:
         os.remove(path)
     except FileNotFoundError:
         pass
     except OSError as exc:
-        logger.warning("Could not delete category image %s: %s", path, exc)
+        logger.warning("Could not delete %s image %s: %s", label, path, exc)
+
+
+def _save_category_image(file_storage, category):
+    """Store an uploaded card image and return its path relative to static/."""
+    return _save_image_upload(file_storage, CATEGORY_IMAGE_DIR, f"category-{category.id}")
+
+
+def _delete_category_image(category):
+    _delete_image_upload(category.image_path, 'category')
 
 
 def _safe_next(default_endpoint='home', **default_kwargs):
@@ -2355,6 +2374,41 @@ def delete_category(category_id):
     db.session.commit()
     flash(f'Category "{name}" deleted. {count} item(s) are now uncategorised.', 'success')
     return redirect(_safe_next('admin_dashboard', section='categories'))
+
+
+@app.route('/admin/faculty/<int:faculty_id>/background', methods=['POST'])
+@admin_required
+def set_faculty_background(faculty_id):
+    """Upload or clear the image shown behind this faculty's category cards.
+
+    Scoped to the faculty in the URL rather than the session's current one, so
+    the authorisation check is against the faculty actually being changed.
+    """
+    faculty = Faculty.query.get_or_404(faculty_id)
+    require_faculty_admin(faculty)
+
+    nxt = _safe_next('admin_dashboard', section='categories', faculty=faculty.code)
+
+    if request.form.get('remove_image'):
+        _delete_image_upload(faculty.background_image_path, 'background')
+        faculty.background_image_path = None
+        db.session.commit()
+        flash(f'Background removed for {faculty.short_name}.', 'success')
+        return redirect(nxt)
+
+    image = _save_image_upload(request.files.get('image'), BACKGROUND_IMAGE_DIR,
+                               f"faculty-{faculty.id}")
+    if not image:
+        # _save_image_upload has already flashed why, unless nothing was chosen.
+        if not (request.files.get('image') and request.files['image'].filename):
+            flash('Choose an image file to upload.', 'warning')
+        return redirect(nxt)
+
+    _delete_image_upload(faculty.background_image_path, 'background')  # don't orphan the old one
+    faculty.background_image_path = image
+    db.session.commit()
+    flash(f'Background updated for {faculty.short_name}.', 'success')
+    return redirect(nxt)
 
 
 @app.route('/admin/category/<int:category_id>/items', methods=['GET', 'POST'])

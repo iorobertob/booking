@@ -5,6 +5,39 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5 — 2026-10-27 — Drop the diagonal weave; admins can upload a card background
+The striped texture behind the category cards is gone, and each faculty can have its own background
+image instead.
+
+- **The weave is removed** from both themes. It was added in v4.3 to give the refraction hard edges
+  to bend, but it read as exactly what it was — a visible diagonal stripe pattern. The soft colour
+  pools stay: they are what give the blur something to scatter, so the cards still read as glass
+  rather than as flat tinted panels.
+- **Per-faculty background image.** `Faculty.background_image_path` (nullable, relative to
+  `static/`) and `POST /admin/faculty/<id>/background` to set or clear it. The upload card sits in
+  Admin → Categories, next to the rest of that faculty's card settings, with a preview, a replace
+  field and a Remove button that only appears when there is something to remove.
+- The image is pushed back so the cards stay the subject — blurred slightly, desaturated slightly,
+  and dimmed by an overlay (dark in dark mode, light in light mode), because an uploaded photo can
+  be bright anywhere and the card titles sit on top of it. The same feathered mask applies, so it
+  fades at the edges instead of ending on a straight line.
+
+Authorisation is scoped to the faculty in the URL, not the session's current one, so the check is
+against the faculty actually being changed; a faculty admin gets 403 on another faculty's
+background. Replacing an image deletes the previous file rather than orphaning it, and the filename
+carries a timestamp so a replacement is always a new URL.
+
+`_save_category_image()` grew into `_save_image_upload(file, directory, stem)`, shared by both
+upload paths, so the extension allowlist and the 4 MB stream-read size check have one implementation.
+
+Upload filenames also gained a short random suffix: the whole-second timestamp alone meant two
+uploads in the same second reused one name, and the replacement would then be served from cache
+under the unchanged URL.
+
+Migration `8d9f1af35972`.
+
+---
+
 ## v4.4.3 — 2026-10-26 — The seam was the specular layer, and the refraction is back
 The division line down the left and across the bottom of a hovered card was never the glass. It was
 `.category-card::after`, the specular highlight.

@@ -427,12 +427,11 @@ td.clickable-cell:hover {
     inset: -14px -10px -10px;
     z-index: -1;
     pointer-events: none;
+    /* Soft colour pools in the theme's own range, and nothing else. A diagonal
+       weave used to sit on top of these to give the refraction hard edges to
+       bend; it read as a visible striped texture, so it is gone. The pools
+       alone still give the blur something to scatter. */
     background:
-        /* the weave: what refraction actually has to bend */
-        repeating-linear-gradient(68deg,
-            rgba(255, 255, 255, 0.10) 0 2px,
-            transparent 2px 20px),
-        /* soft colour pools in the theme's own range */
         radial-gradient(44% 62% at 14% 20%, hsl(252 66% 62% / 0.70) 0%, transparent 62%),
         radial-gradient(40% 58% at 86% 24%, hsl(212 70% 58% / 0.58) 0%, transparent 62%),
         radial-gradient(48% 64% at 60% 90%, hsl(168 56% 48% / 0.40) 0%, transparent 64%);
@@ -445,12 +444,33 @@ td.clickable-cell:hover {
 }
 :root:not([data-bs-theme="dark"]) .category-backdrop {
     background:
-        repeating-linear-gradient(68deg,
-            rgba(60, 70, 140, 0.055) 0 2px,
-            transparent 2px 22px),
         radial-gradient(42% 60% at 14% 22%, hsl(252 72% 70% / 0.42) 0%, transparent 62%),
         radial-gradient(38% 55% at 84% 26%, hsl(214 76% 70% / 0.36) 0%, transparent 62%),
         radial-gradient(46% 62% at 62% 88%, hsl(168 56% 62% / 0.26) 0%, transparent 64%);
+}
+
+/* ── Uploaded backdrop ─────────────────────────────────────────────────────
+   When an admin uploads a background for a faculty it replaces the colour
+   pools entirely (the inline background-image on the element wins over the
+   rules above). It is pushed back so the cards stay the subject: softened a
+   little, desaturated a little, and darkened by the overlay below, because an
+   uploaded photo can be bright anywhere and the card titles sit on top of it.
+   The same feathered mask applies, so it still fades out at the edges rather
+   than ending on a straight line. */
+.category-backdrop--image {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(2px) saturate(0.92);
+}
+.category-backdrop--image::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 8, 26, 0.42);
+}
+:root:not([data-bs-theme="dark"]) .category-backdrop--image::after {
+    background: rgba(255, 255, 255, 0.34);
 }
 
 .category-grid {

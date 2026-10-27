@@ -37,12 +37,15 @@
 {# ── Glass needs something behind it ───────────────────────────────────────
    The page background is a smooth gradient, so blurring (or even refracting)
    it returns the same flat colour — which is why the cards read as painted
-   panels rather than glass. This layer puts soft colour and a fine diagonal
-   texture directly behind the grid, giving the material something to bend and
-   scatter. It sits behind the cards only, so it cannot affect the readability
-   of the equipment table below. #}
+   panels rather than glass. This layer puts soft colour behind the grid so the
+   material has something to scatter. A faculty admin can upload an image to
+   use instead (Admin → Categories); the inline background-image below then
+   wins over the colour pools in the stylesheet. It sits behind the cards only,
+   so it cannot affect the readability of the equipment table below. #}
 <div class="category-stage">
-<div class="category-backdrop" aria-hidden="true"></div>
+<div class="category-backdrop{% if faculty and faculty.background_image_path %} category-backdrop--image{% endif %}"
+     {% if faculty and faculty.background_image_path %}style="background-image:url('{{ url_for('static', filename=faculty.background_image_path) }}');"{% endif %}
+     aria-hidden="true"></div>
 
 {# Lens used by the refraction rule in booking.css. Grey (128,128) is "no
    displacement"; R drives the horizontal sample offset and G the vertical.
