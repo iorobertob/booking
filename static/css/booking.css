@@ -501,8 +501,9 @@ td.clickable-cell:hover {
                 rgba(255, 255, 255, 0.10) 0%,
                 rgba(255, 255, 255, 0.03) 55%,
                 rgba(255, 255, 255, 0.07) 100%);
-    /* The frosting is on .category-card__glass, not here — see that rule.
-       Depth below; a lit rim along the top edge and a dim one along the
+    backdrop-filter: blur(22px) saturate(180%) brightness(1.06);
+    -webkit-backdrop-filter: blur(22px) saturate(180%) brightness(1.06);
+    /* Depth below; a lit rim along the top edge and a dim one along the
        bottom — the pair is what sells thickness rather than a flat pane. */
     box-shadow: 0 10px 30px rgba(5, 5, 20, 0.38),
                 0 2px 6px rgba(5, 5, 20, 0.22),
@@ -515,27 +516,6 @@ td.clickable-cell:hover {
        without promoting it, and no sibling reflows. */
     transition: top 0.22s ease, box-shadow 0.22s ease,
                 border-color 0.22s ease, background 0.22s ease;
-}
-
-/* The frosting, on a layer of its own that nothing ever animates.
-   Safari composites a backdrop-filtered element and then paints its backdrop
-   as its square bounding box, ignoring border-radius, whenever that element is
-   repainted — which the card is for the whole hover transition, and which is
-   what put a translucent rectangle outside the corners. Nothing here changes
-   on hover, so the backdrop is rasterised once in its rounded shape.
-   z-index -3 puts it at the bottom of the card, where the card's own filter
-   used to sit: it frosts the page behind the card and nothing inside it. The
-   category image keeps its own gentle blur and stays above the frost, which
-   is measurably the same picture as before (mean per-pixel difference 2.7/255,
-   edge energy unchanged). */
-.category-card__glass {
-    position: absolute;
-    inset: 0;
-    z-index: -3;
-    border-radius: inherit;
-    pointer-events: none;
-    backdrop-filter: blur(22px) saturate(180%) brightness(1.06);
-    -webkit-backdrop-filter: blur(22px) saturate(180%) brightness(1.06);
 }
 
 /* The uploaded image sits beneath the glass rather than inside an <img>, so the
@@ -608,7 +588,7 @@ td.clickable-cell:hover {
    Anything unsupported simply keeps the rule above, so nothing regresses. */
 @supports (backdrop-filter: url(#glassLens)) {
     @supports not (-webkit-hyphens: none) {
-        .category-card__glass {
+        .category-card {
             backdrop-filter: url(#glassLens) blur(7px) saturate(185%) brightness(1.06);
         }
         /* Deliberately no hover variant. backdrop-filter does not interpolate,
@@ -744,17 +724,19 @@ td.clickable-cell:hover {
        the cursor arrives, and on touch devices that never set them. */
     background-position: calc((var(--cat-hue, 245) - 218) * 1.9% + var(--mx, 0%) * 0.35) 0%,
                          var(--mx, 10%) var(--my, -12%);
-    mix-blend-mode: screen;             /* contained by `isolation: isolate` */
+    /* No mix-blend-mode, and no transform. Both of those promote this layer to
+       its own compositing layer, and WebKit then applies neither the card's
+       `overflow: hidden` + `border-radius` clip nor the layer's own radius to
+       it — so its square corner painted in the notch outside the card's
+       rounded one. Only the top-left corner ever showed it, because that is
+       the one corner where this layer's bloom is bright: that asymmetry is
+       what identified this layer rather than the frosting or the image.
+       Dropping `mix-blend-mode: screen` costs very little, measured rather
+       than assumed: mean difference 4.2/255 across a card, with 1.2% of
+       pixels differing by more than 16. The hover drift moves the gradients
+       inside the box instead of moving the box. */
+    clip-path: inset(0 round 18px);     /* belt and braces: survives compositing */
     opacity: 0.9;
-    /* This layer is exactly the card's box and is never transformed. It used
-       to be oversized and slid on hover with translate3d, which Safari then
-       promoted to its own compositing layer — and WebKit does not apply an
-       ancestor's `overflow: hidden` + `border-radius` clip to a composited
-       descendant, so the layer painted its square corners outside the card.
-       Chrome clips it, which is why the square only showed in Safari, and
-       only on hover, since the 2D scale at rest was never promoted.
-       Drifting the gradients *within* the box gives the same tilt-the-glass
-       highlight with nothing to clip and no edge of its own. */
     transition: background-position 0.5s ease, opacity 0.3s ease;
 }
 .category-card:hover::after,

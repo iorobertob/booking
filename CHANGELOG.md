@@ -5,6 +5,28 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5.4 — 2026-10-27 — The corner square was the specular highlight, not the frosting
+Measuring a screenshot of the artifact instead of reasoning about it showed that **only the
+top-left corner was ever affected**; the other three were clean. That asymmetry identifies the
+layer: the specular highlight is the one layer whose bloom is bright at the top left.
+
+- **Cause.** `.category-card::after` had `mix-blend-mode: screen`. A blended layer is composited,
+  and WebKit then applies neither the card's `overflow: hidden` + `border-radius` clip nor the
+  layer's own radius to it, so its square corner painted in the notch outside the card's rounded
+  one. A square backdrop would have shown at all four corners, which is what ruled the frosting
+  out.
+- **Fix.** The blend is gone, with `clip-path: inset(0 round 18px)` as a second guard, since
+  clip-path is layer geometry and survives compositing where `border-radius` does not. Cost
+  measured rather than assumed: mean difference 4.2/255 across a card, 1.2% of pixels differing by
+  more than 16.
+- **v4.5.3 is reverted.** The separate `.category-card__glass` layer was built on the wrong
+  diagnosis; `backdrop-filter` goes back on the card and the extra element is gone. The `top` lift
+  from v4.5.2 and the radius guards stay — they are cheap and remove real compositing risk.
+- Net visual change across v4.5.1–v4.5.4, diffed against the build before them: mean 2.08/255,
+  with 0.03% of pixels differing by more than 16.
+
+---
+
 ## v4.5.3 — 2026-10-27 — Take the frosting off the card and give it its own layer
 The rectangle at the corners survived v4.5.1 and v4.5.2, still appearing for the length of the
 hover transition and then settling.
