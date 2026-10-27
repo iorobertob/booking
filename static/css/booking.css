@@ -521,6 +521,7 @@ td.clickable-cell:hover {
     z-index: -2;
     background-size: cover;
     background-position: center;
+    border-radius: inherit;             /* so a WebKit clip miss can't square it off */
     transform: scale(1.02);             /* hide edge seams when it scales on hover */
     transition: transform 0.4s ease;
 }
@@ -717,21 +718,26 @@ td.clickable-cell:hover {
                          var(--mx, 10%) var(--my, -12%);
     mix-blend-mode: screen;             /* contained by `isolation: isolate` */
     opacity: 0.9;
-    /* Oversized at rest so the drift below has room. This layer lightens what
-       it covers, and the card clips it, so if its own edge ever slides inside
-       the card you get a hard line with lit glass on one side and unlit on the
-       other — which is exactly what the 7%/-5% hover drift used to do along
-       the left and bottom edges. Scaling (rather than a bigger `inset`) keeps
-       the background percentages mapped to the element box, so the streak and
-       the pointer-tracked bloom land where they did before. */
-    transform: scale(1.16);
-    transition: transform 0.5s ease, opacity 0.3s ease;
+    /* This layer is exactly the card's box and is never transformed. It used
+       to be oversized and slid on hover with translate3d, which Safari then
+       promoted to its own compositing layer — and WebKit does not apply an
+       ancestor's `overflow: hidden` + `border-radius` clip to a composited
+       descendant, so the layer painted its square corners outside the card.
+       Chrome clips it, which is why the square only showed in Safari, and
+       only on hover, since the 2D scale at rest was never promoted.
+       Drifting the gradients *within* the box gives the same tilt-the-glass
+       highlight with nothing to clip and no edge of its own. */
+    transition: background-position 0.5s ease, opacity 0.3s ease;
 }
 .category-card:hover::after,
 .category-card:focus-visible::after {
-    /* Stays within the headroom above: at scale 1.22 the layer reaches -11%
-       and 111%, and 7%/-5% of drift leaves every edge outside the card. */
-    transform: translate3d(7%, -5%, 0) scale(1.22);
+    /* The same drift the old translate3d(7%, -5%) produced. The streak is
+       drawn at 260%, so shifting its position by p% moves it 1.6 x p% of the
+       card: -4.4% -> 7% right, 3% -> 5% up. The bloom is drawn at 100%, where
+       percentage positions have no room to resolve to an offset, so it stays
+       where the pointer handler puts it. */
+    background-position: calc((var(--cat-hue, 245) - 218) * 1.9% + var(--mx, 0%) * 0.35 - 4.4%) 3%,
+                         var(--mx, 10%) var(--my, -12%);
     opacity: 1;
 }
 

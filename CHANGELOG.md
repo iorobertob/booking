@@ -5,6 +5,23 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5.1 — 2026-10-27 — Fix the square showing at the card corners in Safari
+Hovering a category card in Safari painted a square just outside its rounded corners. Chrome was
+unaffected.
+
+- **Cause.** The specular highlight (`.category-card::after`) was an oversized layer that slid on
+  hover with `translate3d`. The 3D transform promoted it to its own compositing layer, and WebKit
+  does not apply an ancestor's `overflow: hidden` + `border-radius` clip to a composited
+  descendant — so the layer drew its own square corners outside the card. That is why it appeared
+  only in Safari, and only on hover: the plain 2D scale at rest was never promoted.
+- **Fix.** The layer is now exactly the card's box and is never transformed; the hover drift moves
+  the gradients *within* it via `background-position`. Nothing extends past the card, so there is
+  nothing for a missed clip to reveal, and the highlight still travels as it did.
+- `.category-card__media` inherits the card's border radius, so a clip miss during its hover zoom
+  cannot square it off either.
+
+---
+
 ## v4.5 — 2026-10-27 — Drop the diagonal weave; admins can upload a card background
 The striped texture behind the category cards is gone, and each faculty can have its own background
 image instead.
