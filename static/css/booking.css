@@ -514,7 +514,9 @@ td.clickable-cell:hover {
        box and everything in it to a compositing layer, which is what makes
        WebKit lose the rounded clip. `top` moves a relatively positioned box
        without promoting it, and no sibling reflows. */
-    transition: top 0.22s ease, box-shadow 0.22s ease,
+    /* box-shadow is deliberately NOT in this list, and the hover rule below
+       does not change it. See the note there. */
+    transition: top 0.22s ease,
                 border-color 0.22s ease, background 0.22s ease;
 }
 
@@ -544,6 +546,32 @@ td.clickable-cell:hover {
                 rgba(10, 10, 30, 0.10) 100%);
 }
 
+/* Hover must not change `box-shadow`. That is the whole fix for the hard-edged
+   rectangles that appeared inside the OTHER cards whenever one card was hovered
+   in Safari, and it was established by bisection rather than by reasoning:
+   fifteen variants of this page, one change each, and exactly three came out
+   clean — this one, removing `backdrop-filter` from the cards, and removing it
+   from the panel behind them.
+
+   The three agree on a mechanism. A card's outer shadow is the one part of it
+   that paints outside its own box, so growing the shadow on hover enlarges the
+   repaint region out across the neighbouring cards. Those neighbours are
+   backdrop-filter elements, and WebKit re-resolves their backdrop over that
+   dirty region only, then composites the result against the part it did not
+   redo. The join is a hard, axis-aligned edge — an L shape anchored at the
+   neighbour's top-left corner, which is nothing any element in this stylesheet
+   draws. Take away the growing shadow (here), or take away the backdrop-filter
+   that has to be re-resolved (the other two clean variants), and there is
+   nothing to mismatch.
+
+   Of the three, this one costs the least: the glass survives intact, and only
+   the shadow's swell on hover is gone. The card still lifts 4px, its border and
+   fill still brighten, its picture still scales and its highlight still drifts.
+   Changing only the shadow's ALPHA while keeping its offsets and blur would
+   leave the repaint region the same size and ought to be safe too, but "ought
+   to be" is what produced the four fixes before this one, so it stays out until
+   something measures it. The inset shadows are inherited unchanged from the
+   resting rule for the same reason. */
 .category-card:hover,
 .category-card:focus-visible {
     top: -4px;
@@ -553,11 +581,6 @@ td.clickable-cell:hover {
                 rgba(255, 255, 255, 0.16) 0%,
                 rgba(255, 255, 255, 0.06) 55%,
                 rgba(255, 255, 255, 0.11) 100%);
-    box-shadow: 0 18px 42px rgba(5, 5, 20, 0.46),
-                0 3px 8px rgba(5, 5, 20, 0.26),
-                inset 0 1px 0 rgba(255, 255, 255, 0.72),
-                inset 0 -1px 0 rgba(255, 255, 255, 0.14),
-                inset 0 0 46px rgba(255, 255, 255, 0.08);
 }
 .category-card:hover .category-card__media { transform: scale(1.08); }
 

@@ -5,6 +5,37 @@ Full documentation lives in [README.md](README.md).
 
 ---
 
+## v4.5.6 — 2026-10-28 — The Safari rectangles were the hover shadow, found by bisection
+Hovering one card drew hard-edged rectangles inside the *other* cards in Safari. Four earlier
+attempts (v4.5.1–v4.5.4) aimed at the hovered card's own corner and could not have fixed it,
+because the artifact is not on the hovered card at all.
+
+- **How it was found.** A high-pass filter over a frame of the reported video left only hard
+  edges, and showed an **L-shaped boundary** anchored at the top-left corner of four cards —
+  horizontal at 48% of the card's height in every bottom-row card, vertical at a different
+  fraction per card. No element in this stylesheet draws that shape, which ruled out every
+  clip-failure and gradient explanation. A fifteen-variant probe replicating the live page
+  exactly — the uploaded faculty backdrop, the real ten cards, one change per variant — was then
+  checked in Safari. Exactly three variants came out clean: no hover box-shadow change, no
+  `backdrop-filter` on the cards, no `backdrop-filter` on the panel behind them.
+- **Cause.** A card's outer box-shadow is the only part of it that paints outside its own box, so
+  growing the shadow on hover enlarges the repaint region out over the neighbouring cards. Those
+  neighbours are `backdrop-filter` elements; WebKit re-resolves their backdrop over the dirty
+  region only and composites it against the part it did not redo, and the join is a hard
+  axis-aligned edge.
+- **Fix.** `.category-card:hover` no longer changes `box-shadow`, and `box-shadow` is out of the
+  card's transition list. It is the cheapest of the three clean variants: the glass is untouched
+  and only the shadow's swell on hover is lost. The card still lifts 4px, its border and fill
+  still brighten, its picture still scales and its highlight still drifts.
+- Light mode was already unaffected: its resting `box-shadow` rule outranks the hover rule on
+  specificity, so the shadow never changed on hover there.
+- An earlier suspicion in this session — that `background-repeat` let the 260% streak tile repeat
+  and show a seam — was **measured and discarded**: the gradient's stops are confined to 36%–65%,
+  so it is fully transparent at both tile edges and the seam carries no contrast. No change was
+  made for it.
+
+---
+
 ## v4.5.5 — 2026-10-27 — Fix stale CSS in development
 `_static_version()` memoised each file's `?v=` stamp for the life of the process. In production
 that is correct, since a file cannot change without a restart. In development it meant that after
